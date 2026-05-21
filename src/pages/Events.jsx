@@ -1,6 +1,8 @@
 import '../styles/dashboard.css'
 import { Link } from 'react-router-dom'
 import { useState } from 'react'
+import event1 from '../assets/event1.jpg'
+import event2 from '../assets/event2.jpg'
 
 function Events() {
 
@@ -65,67 +67,77 @@ function Events() {
 
       {/* SOCIAL EVENT */}
 
-      <Link to="/event-detail">
+<Link to="/event-detail">
 
-        <div className="event-large-card pink-gradient">
+  <div className="event-large-card pink-gradient">
 
-          <div className="event-large-top">
-            <p>SOCIAL</p>
-          </div>
+    <div
+      className="event-large-top"
+      style={{
+        backgroundImage: `url(${event1})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center'
+      }}
+    ></div>
 
-          <div className="event-large-content">
+    <div className="event-large-content">
 
-            <p className="event-time">
-              09:00 - 10:00
-            </p>
+      <p className="event-time">
+        09:00 - 10:00
+      </p>
 
-            <h3>Registration & Welcome</h3>
+      <h3>Registration & Welcome</h3>
 
-            <p className="event-location">
-              STU Main Hall
-            </p>
+      <p className="event-location">
+        STU Main Hall
+      </p>
 
-            <button className="join-btn pink-button">
-              Join Event
-            </button>
+      <button className="join-btn dark-btn">
+        Join Event
+      </button>
 
-          </div>
+    </div>
 
-        </div>
+  </div>
 
-      </Link>
+</Link>
 
-      {/* LECTURE EVENT */}
+{/* LECTURE EVENT */}
 
-      <Link to="/event-detail">
+<Link to="/event-detail">
 
-        <div className="event-large-card purple-gradient">
+  <div className="event-large-card purple-gradient">
 
-          <div className="event-large-top">
-            <p>LECTURES</p>
-          </div>
+    <div
+      className="event-large-top"
+      style={{
+        backgroundImage: `url(${event2})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center'
+      }}
+    ></div>
 
-          <div className="event-large-content">
+    <div className="event-large-content">
 
-            <p className="event-time">
-              10:30 - 12:00
-            </p>
+      <p className="event-time">
+        10:30 - 12:00
+      </p>
 
-            <h3>Orientation Session</h3>
+      <h3>Orientation Session</h3>
 
-            <p className="event-location">
-              Auditorium A
-            </p>
+      <p className="event-location">
+        Auditorium A
+      </p>
 
-            <button className="join-btn dark-btn">
-              Join Event
-            </button>
+      <button className="join-btn dark-btn">
+        Join Event
+      </button>
 
-          </div>
+    </div>
 
-        </div>
+  </div>
 
-      </Link>
+</Link>
 
     </div>
   )

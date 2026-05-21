@@ -181,6 +181,17 @@ button {
   margin-bottom: 28px;
 }
 
+.profile-top {
+  color: white;
+}
+
+.profile-top p,
+.profile-top h1,
+.profile-top h3,
+.profile-top span {
+  color: white;
+}
+
 /* =========================================
    SHARED CARD STYLES
 ========================================= */
@@ -911,7 +922,12 @@ button {
 }
 
 .user-main-card p {
-  opacity: 0.8;
+  opacity: 1;
+  color: white;
+}
+
+.mini-label {
+  color: white;
 }
 
 .info-card {
@@ -1115,6 +1131,10 @@ button {
   right: 30px;
 
   z-index: 5;
+
+
+  opacity: 1;
+  filter: none;
 }
 
 /* =========================================
@@ -1152,13 +1172,32 @@ a:focus-visible {
 }
 
 /* ==icons profile styiling== */
-.profile-info-row,
-.profile-row {
+.profile-info-row {
   display: flex;
   align-items: center;
+  gap: 16px;
 
-  gap: 14px;
+  font-family: 'Abel', sans-serif;
+  font-size: 18px;
+
+  margin-bottom: 18px;
 }
+
+.profile-info-row span {
+  color: #6d6d6d;
+  line-height: 1.3;
+}
+
+.profile-info-row img {
+  width: 24px;
+  height: 24px;
+
+  flex-shrink: 0;
+
+  position: relative;
+  top: -1px;
+}
+
 
 .profile-icon {
   width: 18px;
@@ -1204,4 +1243,25 @@ a:focus-visible {
 
 .event-large-card {
   overflow: hidden;
+}
+
+.event-large-card:hover,
+.today-card:hover,
+.schedule-card-new:hover,
+.action-card:hover {
+  transform: translateY(-2px);
+
+  box-shadow: 0 10px 24px rgba(0,0,0,0.08);
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background: #dcdcdc;
 }

@@ -55,7 +55,7 @@ function Profile() {
               className="profile-icon"
             />
 
-            <p>matej.kovac@gymnazium.sk</p>
+            <span>matej.kovac@gymnazium.sk</span>
 
           </div>
 
@@ -67,7 +67,7 @@ function Profile() {
               className="profile-icon"
             />
 
-            <p>Michalovce, Slovakia</p>
+            <span>Michalovce, Slovakia</span>
 
           </div>
 
@@ -85,7 +85,7 @@ function Profile() {
               className="profile-icon"
             />
 
-            <p>MiniErasmus 2025</p>
+            <span>MiniErasmus 2025</span>
 
           </div>
 
@@ -97,7 +97,7 @@ function Profile() {
               className="profile-icon"
             />
 
-            <p>30.03 — 02.04, Bratislava</p>
+            <span>30.03 — 02.04, Bratislava</span>
 
           </div>
 
@@ -109,7 +109,7 @@ function Profile() {
               className="profile-icon"
             />
 
-            <p>Gymnázium Bratislava</p>
+            <span>Gymnasium Michalovce</span>
 
           </div>
 
@@ -121,7 +121,7 @@ function Profile() {
               className="profile-icon"
             />
 
-            <p>3rd Year, Age 17</p>
+            <span>3rd Year, Age 17</span>
 
           </div>
 
@@ -148,7 +148,7 @@ function Profile() {
 
         <div className="settings-card">
 
-          <div className="profile-row">
+          <div className="profile-info-row">
 
             <img
               src={settingsIcon}
@@ -156,7 +156,7 @@ function Profile() {
               className="profile-icon"
             />
 
-            <p>Account Settings</p>
+            <span>Account Settings</span>
 
           </div>
 
@@ -164,7 +164,7 @@ function Profile() {
 
         <div className="logout-card">
 
-          <div className="profile-row">
+          <div className="profile-info-row">
 
             <img
               src={logoutIcon}
