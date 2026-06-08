@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import logo from '../assets/logo.svg'
 import { getStoredEvents, saveStoredEvents } from '../utils/eventStorage'
+import { getAdminOptions } from '../utils/adminOptionsStorage'
 import {
   addJoinedEvent,
   removeJoinedEvent,
@@ -15,51 +16,56 @@ function EventDetail() {
   const { eventId } = useParams()
 
   const clickedEvent = location.state?.eventItem
+  const adminOptions = getAdminOptions()
 
-function getFreshClickedEvent() {
-  const storedEvents = getStoredEvents()
+  function getFreshClickedEvent() {
+    const storedEvents = getStoredEvents()
 
-  if (clickedEvent) {
-    const freshEvent = storedEvents.find((eventItem) => {
-      return eventItem.id === clickedEvent.id
-    })
+    if (clickedEvent) {
+      const freshEvent = storedEvents.find((eventItem) => {
+        return String(eventItem.id) === String(clickedEvent.id)
+      })
 
-    return freshEvent || clickedEvent
+      return freshEvent || clickedEvent
+    }
+
+    if (eventId) {
+      const freshEvent = storedEvents.find((eventItem) => {
+        return String(eventItem.id) === String(eventId)
+      })
+
+      return freshEvent || null
+    }
+
+    return null
   }
 
-  if (eventId) {
-    const freshEvent = storedEvents.find((eventItem) => {
-      return String(eventItem.id) === String(eventId)
-    })
+  const initialEvent = getFreshClickedEvent()
 
-    return freshEvent || null
-  }
-
-  return null
-}
-
-const [currentEvent, setCurrentEvent] = useState(getFreshClickedEvent())
-
-
+  const [currentEvent, setCurrentEvent] = useState(initialEvent)
   const [showJoinConfirmation, setShowJoinConfirmation] = useState(false)
   const [joinPopupMessage, setJoinPopupMessage] = useState('')
   const [hasJoinedEvent, setHasJoinedEvent] = useState(
-    clickedEvent ? isEventJoined(clickedEvent.id) : false
+    initialEvent ? isEventJoined(initialEvent.id) : false
   )
 
-  if (!currentEvent) {
+  if (!currentEvent || currentEvent.published === false) {
     return (
       <div className="dashboard">
         <div className="detail-content">
           <div className="detail-info-box">
-            <h3>Event not found</h3>
-            <p>Please go back and choose an event again.</p>
+            <h3>Aktivita sa nenašla</h3>
+
+            <p>
+              Táto aktivita už neexistuje, nie je zverejnená alebo nebola
+              správne načítaná.
+            </p>
 
             <button
               className="main-cta-btn"
               onClick={() => navigate('/events')}
             >
-              Back to Events
+              Späť na aktivity
             </button>
           </div>
         </div>
@@ -67,9 +73,75 @@ const [currentEvent, setCurrentEvent] = useState(getFreshClickedEvent())
     )
   }
 
-  const isFull = Number(currentEvent.registered) >= Number(currentEvent.capacity)
-  const spotsLeft = Number(currentEvent.capacity) - Number(currentEvent.registered)
-  const hasMapsUrl = currentEvent.mapsUrl && currentEvent.mapsUrl.trim() !== ''
+  const capacity = Number(currentEvent.capacity) || 0
+  const registered = Number(currentEvent.registered) || 0
+  const isFull = capacity > 0 && registered >= capacity
+  const spotsLeft = Math.max(capacity - registered, 0)
+
+  const hasMapsUrl =
+    currentEvent.mapsUrl && currentEvent.mapsUrl.trim() !== ''
+
+  function getOptionLabel(optionsArray, savedValue) {
+    if (!savedValue) {
+      return ''
+    }
+
+    if (!Array.isArray(optionsArray)) {
+      return savedValue
+    }
+
+    const matchedOption = optionsArray.find((optionItem) => {
+      if (typeof optionItem === 'string') {
+        return optionItem === savedValue
+      }
+
+      return (
+        optionItem.value === savedValue ||
+        optionItem.label === savedValue ||
+        optionItem.name === savedValue ||
+        optionItem.title === savedValue
+      )
+    })
+
+    if (!matchedOption) {
+      return savedValue
+    }
+
+    if (typeof matchedOption === 'string') {
+      return matchedOption
+    }
+
+    return (
+      matchedOption.label ||
+      matchedOption.name ||
+      matchedOption.title ||
+      matchedOption.value ||
+      savedValue
+    )
+  }
+
+  function getCategoryLabel(category) {
+    const dynamicLabel = getOptionLabel(adminOptions.eventCategories, category)
+
+    if (dynamicLabel && dynamicLabel !== category) {
+      return dynamicLabel.toUpperCase()
+    }
+
+    if (category === 'Lectures') return 'PREDNÁŠKA'
+    if (category === 'Workshops') return 'WORKSHOP'
+    if (category === 'Companies') return 'COMPANY VISIT'
+    if (category === 'Social') return 'SOCIAL'
+
+    return category ? category.toUpperCase() : 'AKTIVITA'
+  }
+
+  function getProgramLabel(program) {
+    return getOptionLabel(adminOptions.programs, program)
+  }
+
+  function getLocationLabel(locationValue) {
+    return getOptionLabel(adminOptions.locations, locationValue)
+  }
 
   function openGoogleMaps() {
     if (!hasMapsUrl) {
@@ -83,7 +155,7 @@ const [currentEvent, setCurrentEvent] = useState(getFreshClickedEvent())
     const storedEvents = getStoredEvents()
 
     const updatedEvents = storedEvents.map((eventItem) => {
-      if (eventItem.id === currentEvent.id) {
+      if (String(eventItem.id) === String(currentEvent.id)) {
         return {
           ...eventItem,
           registered: newRegisteredNumber,
@@ -102,7 +174,7 @@ const [currentEvent, setCurrentEvent] = useState(getFreshClickedEvent())
     }
 
     if (!hasJoinedEvent && isFull) {
-      setJoinPopupMessage('This event is already full.')
+      setJoinPopupMessage('Táto aktivita je už obsadená.')
       setShowJoinConfirmation(true)
       return
     }
@@ -111,15 +183,12 @@ const [currentEvent, setCurrentEvent] = useState(getFreshClickedEvent())
       const removeResult = removeJoinedEvent(currentEvent.id)
 
       if (!removeResult.success) {
-        setJoinPopupMessage('This event is not in your personal schedule.')
+        setJoinPopupMessage('Táto aktivita nie je v tvojom osobnom programe.')
         setShowJoinConfirmation(true)
         return
       }
 
-      const newRegisteredNumber = Math.max(
-        Number(currentEvent.registered) - 1,
-        0
-      )
+      const newRegisteredNumber = Math.max(registered - 1, 0)
 
       updateStoredEventCapacity(newRegisteredNumber)
 
@@ -130,7 +199,7 @@ const [currentEvent, setCurrentEvent] = useState(getFreshClickedEvent())
 
       setHasJoinedEvent(false)
       setJoinPopupMessage(
-        'Event cancelled — it was removed from your personal schedule.'
+        'Účasť bola zrušená. Aktivita bola odstránená z tvojho osobného programu.'
       )
       setShowJoinConfirmation(true)
 
@@ -142,13 +211,13 @@ const [currentEvent, setCurrentEvent] = useState(getFreshClickedEvent())
     if (!joinResult.success && joinResult.message === 'already_joined') {
       setHasJoinedEvent(true)
       setJoinPopupMessage(
-        'Already joined — this event is already in your personal schedule.'
+        'Už si prihlásený/á. Táto aktivita je už v tvojom osobnom programe.'
       )
       setShowJoinConfirmation(true)
       return
     }
 
-    const newRegisteredNumber = Number(currentEvent.registered) + 1
+    const newRegisteredNumber = registered + 1
 
     updateStoredEventCapacity(newRegisteredNumber)
 
@@ -159,10 +228,13 @@ const [currentEvent, setCurrentEvent] = useState(getFreshClickedEvent())
 
     setHasJoinedEvent(true)
     setJoinPopupMessage(
-      'Joined successfully — this event was added to your personal schedule.'
+      'Hotovo. Aktivita bola pridaná do tvojho osobného programu.'
     )
     setShowJoinConfirmation(true)
   }
+
+  const programLabel = getProgramLabel(currentEvent.program)
+  const locationLabel = getLocationLabel(currentEvent.location)
 
   return (
     <div className="dashboard">
@@ -172,11 +244,11 @@ const [currentEvent, setCurrentEvent] = useState(getFreshClickedEvent())
             className="back-home"
             onClick={() => navigate(-1)}
           >
-            ← Back
+            ← Späť
           </button>
 
           <p className="mini-label">
-            {currentEvent.category || 'EVENT'}
+            {getCategoryLabel(currentEvent.category)}
           </p>
 
           <h1 className="detail-title">
@@ -191,44 +263,82 @@ const [currentEvent, setCurrentEvent] = useState(getFreshClickedEvent())
 
           <div className="detail-meta-row">
             <div className="detail-meta-card">
-              <p>DATE</p>
+              <p>DÁTUM</p>
               <h4>{currentEvent.date || currentEvent.day}</h4>
             </div>
 
             <div className="detail-meta-card">
-              <p>TIME</p>
-              <h4>{currentEvent.time}</h4>
+              <p>ČAS</p>
+              <h4>{currentEvent.time || 'TBA'}</h4>
             </div>
           </div>
         </div>
       </div>
 
       <div className="detail-content">
+        {currentEvent.image && currentEvent.image.trim() !== '' && (
+          <div className="detail-image-wrap">
+            <img
+              src={currentEvent.image}
+              alt={currentEvent.title}
+              className="detail-event-image"
+            />
+          </div>
+        )}
+
         <div className="detail-info-box">
-          <h3>About Event</h3>
+          <h3>O aktivite</h3>
 
           <p>
             {currentEvent.description ||
-              'More information about this activity will be added soon.'}
+              'Viac informácií o tejto aktivite bude doplnených organizátorom.'}
           </p>
         </div>
 
+        {(programLabel || currentEvent.organizer || currentEvent.day) && (
+          <div className="detail-info-box">
+            <h3>Informácie</h3>
+
+            {programLabel && (
+              <p>
+                <strong>Program:</strong> {programLabel}
+              </p>
+            )}
+
+            {currentEvent.organizer && (
+              <p>
+                <strong>Organizátor:</strong> {currentEvent.organizer}
+              </p>
+            )}
+
+            {currentEvent.day && (
+              <p>
+                <strong>Deň:</strong> {currentEvent.day}
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="detail-info-box">
-          <h3>Capacity</h3>
+          <h3>Kapacita</h3>
 
           <p>
-            {spotsLeft > 0
-              ? `${spotsLeft} spots left`
-              : 'This event is fully booked'}
+            {capacity === 0
+              ? 'Kapacita zatiaľ nebola nastavená.'
+              : spotsLeft > 0
+                ? `${spotsLeft} voľných miest`
+                : 'Táto aktivita je obsadená'}
           </p>
 
-          <p className="join-confirmation-small">
-            {currentEvent.registered} / {currentEvent.capacity} participants registered
-          </p>
+          {capacity > 0 && (
+            <p className="join-confirmation-small">
+              {registered} / {capacity} prihlásených účastníkov
+            </p>
+          )}
         </div>
 
         <div className="detail-info-box">
-          <h3>Location</h3>
+          <h3>Miesto</h3>
 
           <div className="location-action-card">
             <div className="location-icon-box">
@@ -236,16 +346,16 @@ const [currentEvent, setCurrentEvent] = useState(getFreshClickedEvent())
             </div>
 
             <div className="location-card-content">
-              <p className="location-card-label">Event location</p>
+              <p className="location-card-label">Miesto aktivity</p>
 
               <h4>
-                {currentEvent.location}
+                {locationLabel || currentEvent.location || 'Miesto bude doplnené'}
               </h4>
 
               <p className="location-card-note">
                 {hasMapsUrl
-                  ? 'Opens the organizer’s Google Maps location.'
-                  : 'Navigation link has not been added yet.'}
+                  ? 'Otvorí lokalitu v Google Maps.'
+                  : 'Navigačný odkaz zatiaľ nebol pridaný.'}
               </p>
             </div>
           </div>
@@ -259,7 +369,7 @@ const [currentEvent, setCurrentEvent] = useState(getFreshClickedEvent())
             onClick={openGoogleMaps}
             disabled={!hasMapsUrl}
           >
-            {hasMapsUrl ? 'Open in Google Maps' : 'Navigation unavailable'}
+            {hasMapsUrl ? 'Otvoriť v Google Maps' : 'Navigácia nie je dostupná'}
           </button>
         </div>
 
@@ -277,8 +387,8 @@ const [currentEvent, setCurrentEvent] = useState(getFreshClickedEvent())
           {isFull && !hasJoinedEvent
             ? 'Obsadené'
             : hasJoinedEvent
-              ? 'Cancel Event'
-              : 'Join Event'}
+              ? 'Zrušiť účasť'
+              : 'Pridať sa'}
         </button>
       </div>
 
@@ -303,7 +413,7 @@ const [currentEvent, setCurrentEvent] = useState(getFreshClickedEvent())
               className="main-cta-btn"
               onClick={() => setShowJoinConfirmation(false)}
             >
-              Great
+              Rozumiem
             </button>
           </div>
         </div>

@@ -3,18 +3,35 @@ import { Link, useNavigate } from 'react-router-dom'
 import '../styles/dashboard.css'
 import { getStoredEvents } from '../utils/eventStorage'
 import { getStoredParticipants } from '../utils/participantStorage'
+import { supabase } from '../lib/supabaseClient'
 
 function AdminDashboard() {
   const navigate = useNavigate()
+
   const [events, setEvents] = useState([])
   const [participants, setParticipants] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
 
-  function loadDashboardData() {
-    setEvents(getStoredEvents())
-    setParticipants(getStoredParticipants())
+  async function loadDashboardData() {
+    setIsLoading(true)
+
+    const storedEvents = getStoredEvents()
+    const storedParticipants = await getStoredParticipants()
+
+    setEvents(storedEvents)
+    setParticipants(storedParticipants)
+
+    setIsLoading(false)
   }
 
   useEffect(() => {
+    const isLoggedIn = localStorage.getItem('miniEraAdminLoggedIn')
+
+    if (isLoggedIn !== 'true') {
+      navigate('/admin-login')
+      return
+    }
+
     loadDashboardData()
 
     window.addEventListener('focus', loadDashboardData)
@@ -22,26 +39,31 @@ function AdminDashboard() {
     return () => {
       window.removeEventListener('focus', loadDashboardData)
     }
-  }, [])
+  }, [navigate])
 
-  function handleLogout() {
+  async function handleLogout() {
+    await supabase.auth.signOut()
     localStorage.removeItem('miniEraAdminLoggedIn')
-    navigate('/profile')
+    navigate('/admin-login')
   }
 
-  const publishedEvents = events.filter((eventItem) => eventItem.published)
-  const hiddenEvents = events.filter((eventItem) => !eventItem.published)
+  function isEventFull(eventItem) {
+    const registered = Number(eventItem.registered) || 0
+    const capacity = Number(eventItem.capacity) || 0
 
-  const fullEvents = events.filter(
-    (eventItem) => eventItem.registered >= eventItem.capacity
-  )
+    return capacity > 0 && registered >= capacity
+  }
+
+  const publishedEvents = events.filter((eventItem) => eventItem.published !== false)
+  const draftEvents = events.filter((eventItem) => eventItem.published === false)
+  const fullEvents = events.filter((eventItem) => isEventFull(eventItem))
 
   const checkedInParticipants = participants.filter(
-    (participant) => participant.checkedIn
+    (participant) => participant.checked_in
   )
 
   const uniqueLocations = [
-    ...new Set(events.map((eventItem) => eventItem.location).filter(Boolean))
+    ...new Set(events.map((eventItem) => eventItem.location).filter(Boolean)),
   ]
 
   return (
@@ -57,7 +79,7 @@ function AdminDashboard() {
         </div>
 
         <nav className="admin-menu">
-          <Link to="/admin" className="active">
+          <Link to="/admin" className="active-admin-link">
             Prehľad
           </Link>
 
@@ -69,7 +91,8 @@ function AdminDashboard() {
             Účastníci
           </Link>
 
-          <Link to="/admin/settings">Nastavenia
+          <Link to="/admin/settings">
+            Nastavenia
           </Link>
 
           <button onClick={handleLogout}>
@@ -84,78 +107,101 @@ function AdminDashboard() {
             <p className="admin-small-label">PREHĽAD</p>
             <h1>Vitaj späť, organizátor</h1>
             <p>
-              Tu môžeš spravovať Mini Erasmus aktivity, kapacity a informácie pre účastníkov.
+              Tu môžeš rýchlo skontrolovať stav aktivít, účastníkov a kapacít v MiniEra platforme.
             </p>
           </div>
         </header>
 
-        <section className="admin-stats">
-          <Link to="/admin/events" className="admin-stat-card clickable">
-            <p>Zverejnené aktivity</p>
-            <h2>{publishedEvents.length}</h2>
-            <span>viditeľné v účastníckej aplikácii</span>
-          </Link>
-
-          <Link to="/admin/events" className="admin-stat-card clickable">
-            <p>Koncepty</p>
-            <h2>{hiddenEvents.length}</h2>
-            <span>skryté aktivity</span>
-          </Link>
-
-          <Link to="/admin/participants" className="admin-stat-card clickable">
-            <p>Účastníci</p>
-            <h2>{participants.length}</h2>
-            <span>registrovaní študenti</span>
-          </Link>
-
-          <Link to="/admin/participants" className="admin-stat-card clickable">
-            <p>Check-in</p>
-            <h2>{checkedInParticipants.length}</h2>
-            <span>účastníci už prišli</span>
-          </Link>
-        </section>
-
-        <section className="admin-stats">
-          <Link to="/admin/events" className="admin-stat-card clickable">
-            <p>Lokality</p>
-            <h2>{uniqueLocations.length}</h2>
-            <span>miesta v Bratislave</span>
-          </Link>
-
-          <Link to="/admin/events" className="admin-stat-card clickable warning">
-            <p>Kapacity</p>
-            <h2>{fullEvents.length}</h2>
-            <span>naplnené aktivity</span>
-          </Link>
-        </section>
-
-        <section className="admin-dashboard-actions">
-          <div className="admin-panel-card">
-            <div>
-              <h2>Správa aktivít</h2>
-              <p>
-                Pridávaj, upravuj alebo zverejňuj aktivity, ktoré sa zobrazia účastníkom v aplikácii.
-              </p>
+        {isLoading && (
+          <section className="admin-content-card">
+            <div className="admin-empty-state">
+              <h3>Načítavam prehľad...</h3>
+              <p>Chvíľu počkaj, údaje sa pripravujú.</p>
             </div>
+          </section>
+        )}
 
-            <Link to="/admin/events" className="admin-primary-link">
-              Otvoriť aktivity
-            </Link>
-          </div>
+        {!isLoading && (
+          <>
+            <section className="admin-stats admin-stats-compact">
+              <Link to="/admin/events" className="admin-stat-card clickable">
+                <p>Zverejnené aktivity</p>
+                <h2>{publishedEvents.length}</h2>
+                <span>viditeľné pre účastníkov</span>
+              </Link>
 
-          <div className="admin-panel-card">
-            <div>
-              <h2>Správa účastníkov</h2>
+              <Link to="/admin/events" className="admin-stat-card clickable">
+                <p>Koncepty</p>
+                <h2>{draftEvents.length}</h2>
+                <span>uložené, ale nezverejnené</span>
+              </Link>
+
+              <Link to="/admin/participants" className="admin-stat-card clickable">
+                <p>Účastníci</p>
+                <h2>{participants.length}</h2>
+                <span>registrovaní študenti</span>
+              </Link>
+
+              <Link to="/admin/participants" className="admin-stat-card clickable">
+                <p>Check-in</p>
+                <h2>{checkedInParticipants.length}</h2>
+                <span>účastníci už prišli</span>
+              </Link>
+            </section>
+
+            <section className="admin-stats admin-stats-compact">
+              <Link to="/admin/events" className="admin-stat-card clickable">
+                <p>Lokality</p>
+                <h2>{uniqueLocations.length}</h2>
+                <span>miesta použité v aktivitách</span>
+              </Link>
+
+              <Link to="/admin/events" className="admin-stat-card clickable warning">
+                <p>Kapacity</p>
+                <h2>{fullEvents.length}</h2>
+                <span>naplnené aktivity</span>
+              </Link>
+            </section>
+
+            <section className="admin-dashboard-actions">
+              <div className="admin-panel-card">
+                <div>
+                  <h2>Správa aktivít</h2>
+                  <p>
+                    Pridávaj nové aktivity, upravuj informácie, nastav kapacity a rozhodni,
+                    čo bude viditeľné pre účastníkov.
+                  </p>
+                </div>
+
+                <Link to="/admin/events" className="admin-primary-link">
+                  Otvoriť aktivity
+                </Link>
+              </div>
+
+              <div className="admin-panel-card">
+                <div>
+                  <h2>Správa účastníkov</h2>
+                  <p>
+                    Pridávaj účastníkov, spravuj ich skupiny, programy, statusy a check-in počas podujatia.
+                  </p>
+                </div>
+
+                <Link to="/admin/participants" className="admin-primary-link">
+                  Otvoriť účastníkov
+                </Link>
+              </div>
+            </section>
+
+            <section className="admin-content-card">
+              <h2>Ako funguje prehľad</h2>
               <p>
-                Sleduj registrovaných študentov, ich skupiny, status a check-in počas programu.
+                Prehľad slúži na rýchlu kontrolu stavu platformy. Detailné filtrovanie a správa aktivít
+                sa nachádza v sekcii Aktivity. Zverejnené aktivity sú viditeľné pre účastníkov,
+                zatiaľ čo koncepty ostávajú uložené iba v admin paneli.
               </p>
-            </div>
-
-            <Link to="/admin/participants" className="admin-primary-link">
-              Otvoriť účastníkov
-            </Link>
-          </div>
-        </section>
+            </section>
+          </>
+        )}
       </main>
     </div>
   )

@@ -2,17 +2,22 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   getStoredParticipants,
-  saveStoredParticipants,
-  resetStoredParticipants
+  addStoredParticipant,
+  deleteStoredParticipant,
+  updateStoredParticipant,
+  resetStoredParticipants,
 } from '../utils/participantStorage'
 import { getAdminOptions } from '../utils/adminOptionsStorage'
 import '../styles/dashboard.css'
+import { supabase } from '../lib/supabaseClient'
 
 function AdminParticipants() {
   const navigate = useNavigate()
 
   const [participants, setParticipants] = useState([])
   const [adminOptions, setAdminOptions] = useState(getAdminOptions())
+  const [isLoading, setIsLoading] = useState(true)
+  const [formMessage, setFormMessage] = useState('')
 
   const [searchTerm, setSearchTerm] = useState('')
   const [groupFilter, setGroupFilter] = useState('All')
@@ -25,15 +30,24 @@ function AdminParticipants() {
     return {
       name: '',
       school: '',
-      group: options.groups[0] || '',
+      group: options.groups[0] || 'Group A',
       email: '',
-      programTrack: options.programs[0] || '',
+      programTrack: options.programs[0] || 'Mini Erasmus 2026',
       checkedIn: false,
-      status: options.statuses[0] || ''
+      status: options.statuses[0] || 'Active',
     }
   }
 
   const [formData, setFormData] = useState(createEmptyForm(adminOptions))
+
+  async function loadParticipants() {
+    setIsLoading(true)
+
+    const loadedParticipants = await getStoredParticipants()
+
+    setParticipants(loadedParticipants)
+    setIsLoading(false)
+  }
 
   useEffect(() => {
     const isLoggedIn = localStorage.getItem('miniEraAdminLoggedIn')
@@ -46,108 +60,161 @@ function AdminParticipants() {
     const currentOptions = getAdminOptions()
 
     setAdminOptions(currentOptions)
-    setParticipants(getStoredParticipants())
     setFormData(createEmptyForm(currentOptions))
+    loadParticipants()
   }, [navigate])
 
-  function handleLogout() {
-    localStorage.removeItem('miniEraAdminLoggedIn')
-    navigate('/profile')
-  }
-
-  function updateParticipants(nextParticipants) {
-    setParticipants(nextParticipants)
-    saveStoredParticipants(nextParticipants)
-  }
+  async function handleLogout() {
+  await supabase.auth.signOut()
+  localStorage.removeItem('miniEraAdminLoggedIn')
+  navigate('/admin-login')
+}
 
   function handleChange(event) {
     const { name, value, type, checked } = event.target
 
     setFormData({
       ...formData,
-      [name]: type === 'checkbox' ? checked : value
+      [name]: type === 'checkbox' ? checked : value,
     })
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
 
-    const newParticipant = {
-      ...formData,
-      id: Date.now().toString()
-    }
+    setFormMessage('')
 
-    updateParticipants([newParticipant, ...participants])
+    const result = await addStoredParticipant(formData)
+
+    if (!result.success) {
+  setFormMessage(`Could not add participant: ${result.message}`)
+  return
+}
+
+    setParticipants([result.participant, ...participants])
     setFormData(createEmptyForm(adminOptions))
+    setFormMessage('Participant added. They can now log in with this email.')
   }
 
-  function handleDeleteParticipant(id) {
+  async function handleDeleteParticipant(id) {
     const confirmed = window.confirm('Naozaj chceš zmazať tohto účastníka?')
 
     if (!confirmed) return
+
+    const result = await deleteStoredParticipant(id)
+
+    if (!result.success) {
+      alert('Participant could not be deleted.')
+      return
+    }
 
     const filteredParticipants = participants.filter(
       (participant) => participant.id !== id
     )
 
-    updateParticipants(filteredParticipants)
+    setParticipants(filteredParticipants)
   }
 
-  function handleCheckInChange(id) {
-    const updatedParticipants = participants.map((participant) => {
-      if (participant.id === id) {
-        return {
-          ...participant,
-          checkedIn: !participant.checkedIn
-        }
-      }
-
-      return participant
+  async function handleCheckInChange(participant) {
+    const result = await updateStoredParticipant(participant.id, {
+      checked_in: !participant.checked_in,
     })
 
-    updateParticipants(updatedParticipants)
+    if (!result.success) {
+      alert('Check-in status could not be updated.')
+      return
+    }
+
+    setParticipants((currentParticipants) =>
+      currentParticipants.map((currentParticipant) => {
+        if (currentParticipant.id === participant.id) {
+          return result.participant
+        }
+
+        return currentParticipant
+      })
+    )
   }
 
-  function handleStatusChange(id, newStatus) {
-    const updatedParticipants = participants.map((participant) => {
-      if (participant.id === id) {
-        return {
-          ...participant,
-          status: newStatus
-        }
-      }
-
-      return participant
+  async function handleStatusChange(participant, newStatus) {
+    const result = await updateStoredParticipant(participant.id, {
+      status: newStatus,
     })
 
-    updateParticipants(updatedParticipants)
+    if (!result.success) {
+      alert('Status could not be updated.')
+      return
+    }
+
+    setParticipants((currentParticipants) =>
+      currentParticipants.map((currentParticipant) => {
+        if (currentParticipant.id === participant.id) {
+          return result.participant
+        }
+
+        return currentParticipant
+      })
+    )
   }
 
-  function handleProgramChange(id, newProgram) {
-    const updatedParticipants = participants.map((participant) => {
-      if (participant.id === id) {
-        return {
-          ...participant,
-          programTrack: newProgram
-        }
-      }
-
-      return participant
+  async function handleProgramChange(participant, newProgram) {
+    const result = await updateStoredParticipant(participant.id, {
+      program: newProgram,
     })
 
-    updateParticipants(updatedParticipants)
+    if (!result.success) {
+      alert('Program could not be updated.')
+      return
+    }
+
+    setParticipants((currentParticipants) =>
+      currentParticipants.map((currentParticipant) => {
+        if (currentParticipant.id === participant.id) {
+          return result.participant
+        }
+
+        return currentParticipant
+      })
+    )
   }
 
-  function handleResetParticipants() {
+  async function handleResetParticipants() {
     const confirmed = window.confirm('Resetovať účastníkov na pôvodné demo dáta?')
 
     if (!confirmed) return
 
-    const resetParticipants = resetStoredParticipants()
+    const resetParticipants = await resetStoredParticipants()
+
     setParticipants(resetParticipants)
     setFormData(createEmptyForm(adminOptions))
   }
 
+  function getGroupDisplayLabel(groupName) {
+  if (!groupName) {
+    return '-'
+  }
+
+  const directMatch = adminOptions.groups.find((group) => group === groupName)
+
+  if (directMatch) {
+    return directMatch
+  }
+
+  const groupLetter = groupName
+    .replace('Group ', '')
+    .replace('Skupina ', '')
+    .trim()
+
+  const matchingGroup = adminOptions.groups.find((group) => {
+    return group.includes(groupLetter)
+  })
+
+  if (matchingGroup) {
+    return matchingGroup
+  }
+
+  return groupName
+}
   function clearFilters() {
     setSearchTerm('')
     setGroupFilter('All')
@@ -162,22 +229,24 @@ function AdminParticipants() {
   const statusOptions = adminOptions.statuses.filter(Boolean)
 
   const schools = [
-    ...new Set(participants.map((participant) => participant.school).filter(Boolean))
+    ...new Set(participants.map((participant) => participant.school).filter(Boolean)),
   ]
 
   const filteredParticipants = participants.filter((participant) => {
     const searchText = searchTerm.toLowerCase()
-    const participantProgram = participant.programTrack || programOptions[0] || ''
+    const participantGroup = participant.group_name || ''
+    const participantGroupLabel = getGroupDisplayLabel(participantGroup)
+    const participantProgram = participant.program || ''
 
     const matchesSearch =
       participant.name.toLowerCase().includes(searchText) ||
       participant.school.toLowerCase().includes(searchText) ||
-      participant.group.toLowerCase().includes(searchText) ||
+      participantGroupLabel.toLowerCase().includes(searchText) ||
       participant.email.toLowerCase().includes(searchText) ||
       participantProgram.toLowerCase().includes(searchText)
 
     const matchesGroup =
-      groupFilter === 'All' || participant.group === groupFilter
+    groupFilter === 'All' || participantGroupLabel === groupFilter
 
     const matchesSchool =
       schoolFilter === 'All' || participant.school === schoolFilter
@@ -190,8 +259,8 @@ function AdminParticipants() {
 
     const matchesCheckIn =
       checkInFilter === 'All' ||
-      (checkInFilter === 'CheckedIn' && participant.checkedIn) ||
-      (checkInFilter === 'NotCheckedIn' && !participant.checkedIn)
+      (checkInFilter === 'CheckedIn' && participant.checked_in) ||
+      (checkInFilter === 'NotCheckedIn' && !participant.checked_in)
 
     return (
       matchesSearch &&
@@ -203,7 +272,7 @@ function AdminParticipants() {
     )
   })
 
-  const checkedInCount = participants.filter((participant) => participant.checkedIn).length
+  const checkedInCount = participants.filter((participant) => participant.checked_in).length
   const waitingCount = participants.filter((participant) => participant.status === 'Čaká').length
 
   return (
@@ -238,7 +307,8 @@ function AdminParticipants() {
             <p className="admin-small-label">SPRÁVA ÚČASTNÍKOV</p>
             <h1>Účastníci</h1>
             <p>
-              Filtruj účastníkov podľa školy, skupiny, programu a check-in stavu.
+              Admin pridá účastníkov a ich e-mail. Iba tieto e-maily sa vedia
+              prihlásiť do používateľskej MiniEra platformy.
             </p>
           </div>
 
@@ -247,7 +317,7 @@ function AdminParticipants() {
           </button>
         </div>
 
-        <section className="admin-stats">
+        <section className="admin-stats admin-stats-compact">
           <div className="admin-stat-card">
             <p>Všetci účastníci</p>
             <h2>{participants.length}</h2>
@@ -337,7 +407,7 @@ function AdminParticipants() {
                 checked={formData.checkedIn}
                 onChange={handleChange}
               />
-              Účastník je už checknutý
+              Účastník prišiel / registrácia na mieste dokončená
             </label>
 
             <div className="admin-form-actions">
@@ -345,6 +415,12 @@ function AdminParticipants() {
                 Pridať účastníka
               </button>
             </div>
+
+            {formMessage && (
+              <p className="admin-form-message">
+                {formMessage}
+              </p>
+            )}
           </form>
         </section>
 
@@ -353,7 +429,7 @@ function AdminParticipants() {
             <div>
               <h2>Zoznam účastníkov</h2>
               <p>
-                Organizátori môžu filtrovať účastníkov podľa skupiny, školy a programu.
+                Účastníci v tejto tabuľke tvoria whitelist pre používateľské prihlásenie.
               </p>
             </div>
 
@@ -400,93 +476,99 @@ function AdminParticipants() {
             </select>
 
             <select value={checkInFilter} onChange={(event) => setCheckInFilter(event.target.value)}>
-              <option value="All">Všetci podľa check-in</option>
-              <option value="CheckedIn">Iba check-in</option>
-              <option value="NotCheckedIn">Iba bez check-in</option>
+              <option value="All">Všetci podľa príchodu</option>
+              <option value="CheckedIn">Už Prišli</option>
+              <option value="NotCheckedIn">Ešte neprišli</option>
             </select>
           </div>
 
-          <div className="admin-table-wrapper">
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th>Meno</th>
-                  <th>Škola</th>
-                  <th>Skupina</th>
-                  <th>Program</th>
-                  <th>E-mail</th>
-                  <th>Status</th>
-                  <th>Check-in</th>
-                  <th>Akcie</th>
-                </tr>
-              </thead>
+          {isLoading && (
+            <p className="admin-empty-state">Načítavam účastníkov...</p>
+          )}
 
-              <tbody>
-                {filteredParticipants.map((participant) => (
-                  <tr key={participant.id}>
-                    <td>{participant.name}</td>
-                    <td>{participant.school}</td>
-                    <td>{participant.group}</td>
-                    <td>
-                      <select
-                        className="admin-small-select"
-                        value={participant.programTrack || programOptions[0] || ''}
-                        onChange={(event) =>
-                          handleProgramChange(participant.id, event.target.value)
-                        }
-                      >
-                        {programOptions.map((program) => (
-                          <option key={program} value={program}>
-                            {program}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>{participant.email}</td>
-                    <td>
-                      <select
-                        className="admin-small-select"
-                        value={participant.status}
-                        onChange={(event) =>
-                          handleStatusChange(participant.id, event.target.value)
-                        }
-                      >
-                        {statusOptions.map((status) => (
-                          <option key={status} value={status}>
-                            {status}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>
-                      <button
-                        className={
-                          participant.checkedIn
-                            ? 'admin-status-btn checked'
-                            : 'admin-status-btn'
-                        }
-                        onClick={() => handleCheckInChange(participant.id)}
-                      >
-                        {participant.checkedIn ? 'Áno' : 'Nie'}
-                      </button>
-                    </td>
-                    <td>
-                      <button
-                        className="admin-delete-small-btn"
-                        onClick={() => handleDeleteParticipant(participant.id)}
-                      >
-                        Zmazať
-                      </button>
-                    </td>
+          {!isLoading && (
+            <div className="admin-table-wrapper">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Meno</th>
+                    <th>Škola</th>
+                    <th>Skupina</th>
+                    <th>Program</th>
+                    <th>E-mail</th>
+                    <th>Status</th>
+                    <th>Príchod</th>
+                    <th>Akcie</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
 
-            {filteredParticipants.length === 0 && (
-              <p className="admin-empty-state">Nenašli sa žiadni účastníci.</p>
-            )}
-          </div>
+                <tbody>
+                  {filteredParticipants.map((participant) => (
+                    <tr key={participant.id}>
+                      <td>{participant.name}</td>
+                      <td>{participant.school}</td>
+                      <td>{getGroupDisplayLabel(participant.group_name)}</td>
+                      <td>
+                        <select
+                          className="admin-small-select"
+                          value={participant.program || programOptions[0] || ''}
+                          onChange={(event) =>
+                            handleProgramChange(participant, event.target.value)
+                          }
+                        >
+                          {programOptions.map((program) => (
+                            <option key={program} value={program}>
+                              {program}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td>{participant.email}</td>
+                      <td>
+                        <select
+                          className="admin-small-select"
+                          value={participant.status}
+                          onChange={(event) =>
+                            handleStatusChange(participant, event.target.value)
+                          }
+                        >
+                          {statusOptions.map((status) => (
+                            <option key={status} value={status}>
+                              {status}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td>
+                        <button
+                          className={
+                            participant.checked_in
+                              ? 'admin-status-btn checked'
+                              : 'admin-status-btn'
+                          }
+                          onClick={() => handleCheckInChange(participant)}
+                        >
+                          {participant.checked_in ? 'Prišiel/a' : 'Neprišiel/a'}
+                        </button>
+                      </td>
+                      <td>
+                        <button
+                          className="admin-delete-small-btn"
+                          onClick={() => handleDeleteParticipant(participant.id)}
+                        >
+                          Zmazať
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {filteredParticipants.length === 0 && (
+                <p className="admin-empty-state">Nenašli sa žiadni účastníci.</p>
+              )}
+            </div>
+          )}
         </section>
       </main>
     </div>

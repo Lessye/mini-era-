@@ -1,24 +1,100 @@
 import '../styles/dashboard.css'
-import logo from "../assets/logo.svg";
+import logo from '../assets/logo.svg'
 
 import emailIcon from '../assets/icons/email.svg'
 import locationIcon from '../assets/icons/location.svg'
 import profileCalendarIcon from '../assets/icons/profilecalendar.svg'
 import schoolIcon from '../assets/icons/school.svg'
-import settingsIcon from '../assets/icons/settings.svg'
 import logoutIcon from '../assets/icons/logout.svg'
-import { Link } from 'react-router-dom'
+
+import { Link, useNavigate } from 'react-router-dom'
+import {
+  getCurrentParticipant,
+  logoutCurrentParticipant,
+} from '../utils/participantLoginStorage'
+import { getStoredEvents } from '../utils/eventStorage'
+import { getProgramInfo } from '../utils/programInfoStorage'
 
 function Profile() {
+  const navigate = useNavigate()
+
+  const participant = getCurrentParticipant()
+  const programInfo = getProgramInfo()
+
+  const storedEvents = getStoredEvents()
+
+  const publishedEvents = storedEvents.filter((eventItem) => {
+    return eventItem.published !== false
+  })
+
+  function getInitials(name) {
+    if (!name) {
+      return 'ME'
+    }
+
+    const nameParts = name.trim().split(' ')
+
+    if (nameParts.length === 1) {
+      return nameParts[0].charAt(0).toUpperCase()
+    }
+
+    return `${nameParts[0].charAt(0)}${nameParts[1].charAt(0)}`.toUpperCase()
+  }
+
+  function getGroupShortLabel(groupName) {
+    if (!groupName) {
+      return '-'
+    }
+
+    return groupName.replace('Group ', '')
+  }
+
+  function getGroupDisplayLabel(groupName) {
+  if (!groupName) {
+    return '-'
+  }
+
+  const directMatch = adminOptions.groups.find((group) => group === groupName)
+
+  if (directMatch) {
+    return directMatch
+  }
+
+  const groupLetter = groupName
+    .replace('Group ', '')
+    .replace('Skupina ', '')
+    .trim()
+
+  const matchingGroup = adminOptions.groups.find((group) => {
+    return group.includes(groupLetter)
+  })
+
+  if (matchingGroup) {
+    return matchingGroup
+  }
+
+  return groupName
+}
+
+  function handleLogout() {
+    logoutCurrentParticipant()
+    navigate('/login')
+  }
+
+  if (!participant) {
+    navigate('/login')
+    return null
+  }
+
   return (
     <div className="dashboard">
 
       <div className="profile-top">
 
-        <p className="mini-label">MINI ERA</p>
+        <p className="mini-label">MINIERA</p>
 
         <h1 className="profile-page-title">
-          Student
+          Profil
         </h1>
 
         <img
@@ -30,12 +106,12 @@ function Profile() {
         <div className="user-main-card">
 
           <div className="user-avatar">
-            MK
+            {getInitials(participant.name)}
           </div>
 
           <div>
-            <h3>Matej Kováč</h3>
-            <p>High School Student</p>
+            <h3>{participant.name}</h3>
+            <p>Účastník programu</p>
           </div>
 
         </div>
@@ -46,17 +122,17 @@ function Profile() {
 
         <div className="info-card">
 
-          <h3>Contact Information</h3>
+          <h3>Kontaktné údaje</h3>
 
           <div className="profile-info-row">
 
             <img
               src={emailIcon}
-              alt="Email"
+              alt="E-mail"
               className="profile-icon"
             />
 
-            <span>matej.kovac@gymnazium.sk</span>
+            <span>{participant.email}</span>
 
           </div>
 
@@ -64,11 +140,13 @@ function Profile() {
 
             <img
               src={locationIcon}
-              alt="Location"
+              alt="Lokalita"
               className="profile-icon"
             />
 
-            <span>Michalovce, Slovakia</span>
+            <span>
+              {programInfo.city}, {programInfo.country}
+            </span>
 
           </div>
 
@@ -76,7 +154,7 @@ function Profile() {
 
         <div className="info-card">
 
-          <h3>Program Details</h3>
+          <h3>Detaily programu</h3>
 
           <div className="profile-info-row">
 
@@ -86,7 +164,7 @@ function Profile() {
               className="profile-icon"
             />
 
-            <span>MiniErasmus 2025</span>
+            <span>{participant.program || programInfo.programName}</span>
 
           </div>
 
@@ -94,11 +172,13 @@ function Profile() {
 
             <img
               src={locationIcon}
-              alt="Location"
+              alt="Dátum"
               className="profile-icon"
             />
 
-            <span>30.03 — 02.04, Bratislava</span>
+            <span>
+              {programInfo.startDate} — {programInfo.endDate}, {programInfo.city}
+            </span>
 
           </div>
 
@@ -106,11 +186,11 @@ function Profile() {
 
             <img
               src={schoolIcon}
-              alt="School"
+              alt="Škola"
               className="profile-icon"
             />
 
-            <span>Gymnasium Michalovce</span>
+            <span>{participant.school || 'Škola nie je priradená'}</span>
 
           </div>
 
@@ -118,11 +198,11 @@ function Profile() {
 
             <img
               src={profileCalendarIcon}
-              alt="Student"
+              alt="Skupina"
               className="profile-icon"
             />
 
-            <span>3rd Year, Age 17</span>
+            <span>{participant.group_name || 'Skupina nie je priradená'}</span>
 
           </div>
 
@@ -131,34 +211,20 @@ function Profile() {
         <div className="profile-stat-grid">
 
           <div className="mini-stat-card">
-            <h2>12</h2>
-            <p>EVENTS</p>
+            <h2>{publishedEvents.length}</h2>
+            <p>AKTIVITY</p>
           </div>
 
           <div className="mini-stat-card">
-            <h2>4</h2>
-            <p>DAYS</p>
+            <h2>{programInfo.programDays}</h2>
+            <p>DNI</p>
           </div>
 
           <div className="mini-stat-card">
-            <h2>42</h2>
-            <p>STUDENTS</p>
-          </div>
-
-        </div>
-
-        <div className="settings-card">
-
-          <div className="profile-info-row">
-
-            <img
-              src={settingsIcon}
-              alt="Settings"
-              className="profile-icon"
-            />
-
-            <span>Account Settings</span>
-
+            <h2 className="group-stat-value">
+              {getGroupShortLabel(participant.group_name)}
+            </h2>
+            <p>SKUPINA</p>
           </div>
 
         </div>
@@ -166,24 +232,28 @@ function Profile() {
         <Link to="/admin-login">
           <div className="settings-card">
             Administrátorský prístup
-           </div>
+          </div>
         </Link>
 
-        <div className="logout-card">
+        <button
+          type="button"
+          className="logout-card profile-logout-button"
+          onClick={handleLogout}
+        >
 
           <div className="profile-info-row">
 
             <img
               src={logoutIcon}
-              alt="Logout"
+              alt="Odhlásiť sa"
               className="profile-icon"
             />
 
-            <p>Sign Out</p>
+            <p>Odhlásiť sa</p>
 
           </div>
 
-        </div>
+        </button>
 
       </div>
 

@@ -3,8 +3,15 @@ import { Link } from 'react-router-dom'
 import logo from '../assets/logo.svg'
 import { getStoredEvents } from '../utils/eventStorage'
 import { getJoinedEvents } from '../utils/joinedEventsStorage'
+import { getCurrentParticipant } from '../utils/participantLoginStorage'
+import { getProgramInfo } from '../utils/programInfoStorage'
+import { getAdminOptions } from '../utils/adminOptionsStorage'
 
 function Dashboard() {
+  const currentParticipant = getCurrentParticipant()
+  const programInfo = getProgramInfo()
+  const adminOptions = getAdminOptions()
+
   const storedEvents = getStoredEvents()
   const joinedEvents = getJoinedEvents()
 
@@ -18,20 +25,47 @@ function Dashboard() {
         return eventItem.id === joinedItem.eventId
       })
 
+      // If the event was deleted in admin, do not show the old backup data.
+      if (!freshEvent) {
+        return null
+      }
+
+      // If the event was hidden/unpublished in admin, remove it from dashboard.
+      if (freshEvent.published === false) {
+        return null
+      }
+
       return {
         ...joinedItem,
-        event: freshEvent || joinedItem.event,
+        event: freshEvent,
       }
     })
-    .filter((joinedItem) => joinedItem.event)
+    .filter((joinedItem) => joinedItem !== null)
 
   const upcomingEvents = joinedEventsWithFreshData.slice(0, 3)
+
+  function getCategoryLabel(category) {
+    const matchingCategory = adminOptions.eventCategories.find((categoryItem) => {
+      return categoryItem.value === category || categoryItem.label === category
+    })
+
+    if (matchingCategory) {
+      return matchingCategory.label
+    }
+
+    if (category === 'Lectures') return 'Prednáška'
+    if (category === 'Workshops') return 'Workshop'
+    if (category === 'Companies') return 'Firma'
+    if (category === 'Social') return 'Social'
+
+    return 'Aktivita'
+  }
 
   return (
     <div className="dashboard">
       <div className="top-banner">
         <div className="status-row">
-          <p className="mini-label">DASHBOARD</p>
+          <p className="mini-label">DOMOV</p>
 
           <img
             src={logo}
@@ -44,13 +78,13 @@ function Dashboard() {
 
         <div className="welcome-card">
           <div>
-            <p className="small-date">SUNDAY, MAR 30</p>
-            <h3>Welcome Day</h3>
-          </div>
+            <p className="small-date">
+              {programInfo.programName}
+            </p>
 
-          <div className="day-counter">
-            <h2>1/4</h2>
-            <p>DAY</p>
+            <h3>
+              Vitaj, {currentParticipant?.name || 'účastník'}
+            </h3>
           </div>
         </div>
       </div>
@@ -58,50 +92,52 @@ function Dashboard() {
       <div className="stats-grid">
         <div className="stat-card">
           <h2>{publishedEvents.length}</h2>
-          <p>Total Events</p>
+          <p>Aktivity</p>
         </div>
 
         <div className="stat-card">
           <h2>{joinedEventsWithFreshData.length}</h2>
-          <p>Attending</p>
+          <p>Prihlásené</p>
         </div>
 
         <div className="stat-card">
-          <h2>0</h2>
-          <p>Completed</p>
+          <h2>{programInfo.programDays}</h2>
+          <p>Dni</p>
         </div>
       </div>
 
       <div className="action-grid">
         <Link to="/schedule" className="action-link">
           <div className="action-card dark-card">
-            <p>Full Schedule</p>
+            <p>Môj program</p>
           </div>
         </Link>
 
         <Link to="/events" className="action-link">
           <div className="action-card orange-card">
-            <p>Browse Events</p>
+            <p>Aktivity</p>
           </div>
         </Link>
       </div>
 
       <div className="today-section">
         <div className="section-header">
-          <h3>My Upcoming Events</h3>
+          <h3>Moje najbližšie aktivity</h3>
 
           <Link to="/schedule" className="see-all-link">
-            <p>See All</p>
+            <p>Zobraziť všetko</p>
           </Link>
         </div>
 
         {upcomingEvents.length === 0 ? (
           <div className="today-card">
             <div>
-              <p className="event-time">No events yet</p>
-              <h4>Your schedule is empty</h4>
+              <p className="event-time">Zatiaľ bez aktivít</p>
+
+              <h4>Tvoj program je prázdny</h4>
+
               <p className="event-location">
-                Join events to see them here.
+                Pridaj sa k aktivitám a zobrazia sa tu.
               </p>
             </div>
 
@@ -112,7 +148,7 @@ function Dashboard() {
         ) : (
           upcomingEvents.map((joinedItem, index) => (
             <Link
-              to="/event-detail"
+              to={`/event-detail/${joinedItem.event.id}`}
               state={{ eventItem: joinedItem.event }}
               key={joinedItem.event.id}
               className="dashboard-event-link"
@@ -142,8 +178,8 @@ function Dashboard() {
                   }
                 >
                   {index === 0
-                    ? 'NEXT'
-                    : joinedItem.event.category || 'EVENT'}
+                    ? 'ĎALŠIE'
+                    : getCategoryLabel(joinedItem.event.category)}
                 </div>
               </div>
             </Link>

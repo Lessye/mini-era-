@@ -1,35 +1,68 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { supabase } from '../lib/supabaseClient'
 import '../styles/dashboard.css'
 
 function AdminLogin() {
+  const [email, setEmail] = useState('admin@miniera.com')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+
   const navigate = useNavigate()
 
-  function handleLogin(event) {
+  async function handleLogin(event) {
     event.preventDefault()
 
-    if (password === 'miniera2026') {
-      localStorage.setItem('miniEraAdminLoggedIn', 'true')
-      navigate('/admin')
-    } else {
-      setError('Nesprávne heslo. Skús znova.')
+    setError('')
+    setIsLoading(true)
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password: password,
+    })
+
+    setIsLoading(false)
+
+    if (error || !data.user) {
+      setError('Nesprávny e-mail alebo heslo. Skús znova.')
+      return
     }
+
+    localStorage.setItem('miniEraAdminLoggedIn', 'true')
+    navigate('/admin')
   }
 
   return (
     <div className="admin-login-page">
       <div className="admin-login-card">
-        <p className="mini-label">MINIERA ADMIN</p>
+  <button
+    type="button"
+    className="admin-login-back-btn"
+    onClick={() => navigate('/profile')}
+  >
+    ← Späť do aplikácie
+  </button>
+
+  <p className="mini-label">MINIERA ADMIN</p>
 
         <h1>Admin prihlásenie</h1>
 
         <p className="admin-login-text">
-          Prihlás sa ako organizátor a spravuj aktivity Mini Erasmus programu.
+          Prihlás sa ako organizátor a spravuj aktivity, účastníkov a informácie
+          Mini Erasmus programu.
         </p>
 
         <form onSubmit={handleLogin}>
+          <label>Admin e-mail</label>
+
+          <input
+            type="email"
+            placeholder="admin@miniera.com"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+
           <label>Admin heslo</label>
 
           <input
@@ -41,8 +74,8 @@ function AdminLogin() {
 
           {error && <p className="admin-login-error">{error}</p>}
 
-          <button type="submit">
-            Prihlásiť sa ako admin
+          <button type="submit" disabled={isLoading}>
+            {isLoading ? 'Prihlasujem...' : 'Prihlásiť sa ako admin'}
           </button>
         </form>
       </div>

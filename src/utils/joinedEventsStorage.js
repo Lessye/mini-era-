@@ -1,17 +1,15 @@
+import { getCurrentParticipant } from './participantLoginStorage'
+
 const JOINED_EVENTS_KEY = 'miniEraJoinedEvents'
-const CURRENT_PARTICIPANT_EMAIL_KEY = 'miniEraCurrentParticipantEmail'
 
 export function getCurrentParticipantEmail() {
-  const savedEmail = localStorage.getItem(CURRENT_PARTICIPANT_EMAIL_KEY)
+  const currentParticipant = getCurrentParticipant()
 
-  if (savedEmail) {
-    return savedEmail
+  if (currentParticipant && currentParticipant.email) {
+    return currentParticipant.email
   }
 
-  const demoEmail = 'participant@miniera.com'
-  localStorage.setItem(CURRENT_PARTICIPANT_EMAIL_KEY, demoEmail)
-
-  return demoEmail
+  return 'participant@miniera.com'
 }
 
 export function getAllJoinedEvents() {

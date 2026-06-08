@@ -16,69 +16,69 @@ import "../styles/dashboard.css";
 
 function BottomNav() {
   return (
-<nav className="bottom-nav">
+    <nav className="bottom-nav">
 
-  <NavLink to="/">
-    {({ isActive }) => (
-      <>
-        <div className="nav-icon">
-          <img
-            src={isActive ? homeActiveIcon : homeIcon}
-            alt="Home"
-          />
-        </div>
+      <NavLink to="/">
+        {({ isActive }) => (
+          <>
+            <div className="nav-icon">
+              <img
+                src={isActive ? homeActiveIcon : homeIcon}
+                alt="Domov"
+              />
+            </div>
 
-        <span>Home</span>
-      </>
-    )}
-  </NavLink>
+            <span>Domov</span>
+          </>
+        )}
+      </NavLink>
 
-  <NavLink to="/schedule">
-    {({ isActive }) => (
-      <>
-        <div className="nav-icon">
-          <img
-            src={isActive ? calendarActiveIcon : calendarIcon}
-            alt="Calendar"
-          />
-        </div>
+      <NavLink to="/schedule">
+        {({ isActive }) => (
+          <>
+            <div className="nav-icon">
+              <img
+                src={isActive ? calendarActiveIcon : calendarIcon}
+                alt="Kalendár"
+              />
+            </div>
 
-        <span>Calendar</span>
-      </>
-    )}
-  </NavLink>
+            <span>Kalendár</span>
+          </>
+        )}
+      </NavLink>
 
-  <NavLink to="/events">
-    {({ isActive }) => (
-      <>
-        <div className="nav-icon">
-          <img
-            src={isActive ? eventsActiveIcon : eventsIcon}
-            alt="Events"
-          />
-        </div>
+      <NavLink to="/events">
+        {({ isActive }) => (
+          <>
+            <div className="nav-icon">
+              <img
+                src={isActive ? eventsActiveIcon : eventsIcon}
+                alt="Aktivity"
+              />
+            </div>
 
-        <span>Events</span>
-      </>
-    )}
-  </NavLink>
+            <span>Aktivity</span>
+          </>
+        )}
+      </NavLink>
 
-  <NavLink to="/profile">
-    {({ isActive }) => (
-      <>
-        <div className="nav-icon">
-          <img
-            src={isActive ? profileActiveIcon : profileIcon}
-            alt="Profile"
-          />
-        </div>
+      <NavLink to="/profile">
+        {({ isActive }) => (
+          <>
+            <div className="nav-icon">
+              <img
+                src={isActive ? profileActiveIcon : profileIcon}
+                alt="Profil"
+              />
+            </div>
 
-        <span>Profile</span>
-      </>
-    )}
-  </NavLink>
+            <span>Profil</span>
+          </>
+        )}
+      </NavLink>
 
-</nav>
+    </nav>
   );
 }
 
