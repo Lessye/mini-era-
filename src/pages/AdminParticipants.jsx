@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  getStoredParticipants,
-  addStoredParticipant,
-  deleteStoredParticipant,
-  updateStoredParticipant,
-  resetStoredParticipants,
-} from '../utils/participantStorage'
+  getSupabaseParticipants,
+  addSupabaseParticipant,
+  deleteSupabaseParticipant,
+  updateSupabaseParticipant,
+  resetSupabaseParticipants,
+} from '../utils/supabaseParticipantStorage'
 import { getAdminOptions } from '../utils/adminOptionsStorage'
 import '../styles/dashboard.css'
 import { supabase } from '../lib/supabaseClient'
@@ -26,15 +26,27 @@ function AdminParticipants() {
   const [checkInFilter, setCheckInFilter] = useState('All')
   const [programFilter, setProgramFilter] = useState('All')
 
+  function getOptionValue(option) {
+    if (typeof option === 'string') {
+      return option
+    }
+
+    return option.value || option.label || ''
+  }
+
   function createEmptyForm(options) {
+    const firstGroup = options.groups?.[0] || 'Skupina A'
+    const firstProgram = options.programs?.[0] || 'Mini Erasmus Bratislava 2026'
+    const firstStatus = options.statuses?.[0] || 'Active'
+
     return {
       name: '',
       school: '',
-      group: options.groups[0] || 'Group A',
+      group: getOptionValue(firstGroup),
       email: '',
-      programTrack: options.programs[0] || 'Mini Erasmus 2026',
+      program: getOptionValue(firstProgram),
       checkedIn: false,
-      status: options.statuses[0] || 'Active',
+      status: getOptionValue(firstStatus),
     }
   }
 
@@ -43,7 +55,7 @@ function AdminParticipants() {
   async function loadParticipants() {
     setIsLoading(true)
 
-    const loadedParticipants = await getStoredParticipants()
+    const loadedParticipants = await getSupabaseParticipants()
 
     setParticipants(loadedParticipants)
     setIsLoading(false)
@@ -65,10 +77,10 @@ function AdminParticipants() {
   }, [navigate])
 
   async function handleLogout() {
-  await supabase.auth.signOut()
-  localStorage.removeItem('miniEraAdminLoggedIn')
-  navigate('/admin-login')
-}
+    await supabase.auth.signOut()
+    localStorage.removeItem('miniEraAdminLoggedIn')
+    navigate('/admin-login')
+  }
 
   function handleChange(event) {
     const { name, value, type, checked } = event.target
@@ -84,16 +96,16 @@ function AdminParticipants() {
 
     setFormMessage('')
 
-    const result = await addStoredParticipant(formData)
+    const result = await addSupabaseParticipant(formData)
 
     if (!result.success) {
-  setFormMessage(`Could not add participant: ${result.message}`)
-  return
-}
+      setFormMessage(`Účastníka sa nepodarilo pridať: ${result.message}`)
+      return
+    }
 
     setParticipants([result.participant, ...participants])
     setFormData(createEmptyForm(adminOptions))
-    setFormMessage('Participant added. They can now log in with this email.')
+    setFormMessage('Účastník bol pridaný. Teraz sa vie prihlásiť týmto e-mailom.')
   }
 
   async function handleDeleteParticipant(id) {
@@ -101,10 +113,10 @@ function AdminParticipants() {
 
     if (!confirmed) return
 
-    const result = await deleteStoredParticipant(id)
+    const result = await deleteSupabaseParticipant(id)
 
     if (!result.success) {
-      alert('Participant could not be deleted.')
+      alert('Účastníka sa nepodarilo zmazať.')
       return
     }
 
@@ -116,12 +128,12 @@ function AdminParticipants() {
   }
 
   async function handleCheckInChange(participant) {
-    const result = await updateStoredParticipant(participant.id, {
+    const result = await updateSupabaseParticipant(participant.id, {
       checked_in: !participant.checked_in,
     })
 
     if (!result.success) {
-      alert('Check-in status could not be updated.')
+      alert('Check-in status sa nepodarilo upraviť.')
       return
     }
 
@@ -137,12 +149,12 @@ function AdminParticipants() {
   }
 
   async function handleStatusChange(participant, newStatus) {
-    const result = await updateStoredParticipant(participant.id, {
+    const result = await updateSupabaseParticipant(participant.id, {
       status: newStatus,
     })
 
     if (!result.success) {
-      alert('Status could not be updated.')
+      alert('Status sa nepodarilo upraviť.')
       return
     }
 
@@ -158,12 +170,12 @@ function AdminParticipants() {
   }
 
   async function handleProgramChange(participant, newProgram) {
-    const result = await updateStoredParticipant(participant.id, {
+    const result = await updateSupabaseParticipant(participant.id, {
       program: newProgram,
     })
 
     if (!result.success) {
-      alert('Program could not be updated.')
+      alert('Program sa nepodarilo upraviť.')
       return
     }
 
@@ -183,38 +195,39 @@ function AdminParticipants() {
 
     if (!confirmed) return
 
-    const resetParticipants = await resetStoredParticipants()
+    const resetParticipants = await resetSupabaseParticipants()
 
     setParticipants(resetParticipants)
     setFormData(createEmptyForm(adminOptions))
   }
 
   function getGroupDisplayLabel(groupName) {
-  if (!groupName) {
-    return '-'
+    if (!groupName) {
+      return '-'
+    }
+
+    const directMatch = groupOptions.find((group) => group === groupName)
+
+    if (directMatch) {
+      return directMatch
+    }
+
+    const groupLetter = groupName
+      .replace('Group ', '')
+      .replace('Skupina ', '')
+      .trim()
+
+    const matchingGroup = groupOptions.find((group) => {
+      return group.includes(groupLetter)
+    })
+
+    if (matchingGroup) {
+      return matchingGroup
+    }
+
+    return groupName
   }
 
-  const directMatch = adminOptions.groups.find((group) => group === groupName)
-
-  if (directMatch) {
-    return directMatch
-  }
-
-  const groupLetter = groupName
-    .replace('Group ', '')
-    .replace('Skupina ', '')
-    .trim()
-
-  const matchingGroup = adminOptions.groups.find((group) => {
-    return group.includes(groupLetter)
-  })
-
-  if (matchingGroup) {
-    return matchingGroup
-  }
-
-  return groupName
-}
   function clearFilters() {
     setSearchTerm('')
     setGroupFilter('All')
@@ -224,9 +237,9 @@ function AdminParticipants() {
     setProgramFilter('All')
   }
 
-  const groupOptions = adminOptions.groups.filter(Boolean)
-  const programOptions = adminOptions.programs.filter(Boolean)
-  const statusOptions = adminOptions.statuses.filter(Boolean)
+  const groupOptions = (adminOptions.groups || []).map(getOptionValue).filter(Boolean)
+  const programOptions = (adminOptions.programs || []).map(getOptionValue).filter(Boolean)
+  const statusOptions = (adminOptions.statuses || []).map(getOptionValue).filter(Boolean)
 
   const schools = [
     ...new Set(participants.map((participant) => participant.school).filter(Boolean)),
@@ -239,14 +252,14 @@ function AdminParticipants() {
     const participantProgram = participant.program || ''
 
     const matchesSearch =
-      participant.name.toLowerCase().includes(searchText) ||
-      participant.school.toLowerCase().includes(searchText) ||
+      (participant.name || '').toLowerCase().includes(searchText) ||
+      (participant.school || '').toLowerCase().includes(searchText) ||
       participantGroupLabel.toLowerCase().includes(searchText) ||
-      participant.email.toLowerCase().includes(searchText) ||
+      (participant.email || '').toLowerCase().includes(searchText) ||
       participantProgram.toLowerCase().includes(searchText)
 
     const matchesGroup =
-    groupFilter === 'All' || participantGroupLabel === groupFilter
+      groupFilter === 'All' || participantGroupLabel === groupFilter
 
     const matchesSchool =
       schoolFilter === 'All' || participant.school === schoolFilter
@@ -381,8 +394,8 @@ function AdminParticipants() {
             />
 
             <select
-              name="programTrack"
-              value={formData.programTrack}
+              name="program"
+              value={formData.program}
               onChange={handleChange}
             >
               {programOptions.map((program) => (
@@ -477,7 +490,7 @@ function AdminParticipants() {
 
             <select value={checkInFilter} onChange={(event) => setCheckInFilter(event.target.value)}>
               <option value="All">Všetci podľa príchodu</option>
-              <option value="CheckedIn">Už Prišli</option>
+              <option value="CheckedIn">Už prišli</option>
               <option value="NotCheckedIn">Ešte neprišli</option>
             </select>
           </div>
@@ -527,7 +540,7 @@ function AdminParticipants() {
                       <td>
                         <select
                           className="admin-small-select"
-                          value={participant.status}
+                          value={participant.status || statusOptions[0] || 'Active'}
                           onChange={(event) =>
                             handleStatusChange(participant, event.target.value)
                           }

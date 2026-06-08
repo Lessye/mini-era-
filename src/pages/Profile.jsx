@@ -8,24 +8,47 @@ import schoolIcon from '../assets/icons/school.svg'
 import logoutIcon from '../assets/icons/logout.svg'
 
 import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import {
   getCurrentParticipant,
   logoutCurrentParticipant,
+  refreshCurrentParticipant,
 } from '../utils/participantLoginStorage'
-import { getStoredEvents } from '../utils/eventStorage'
 import { getProgramInfo } from '../utils/programInfoStorage'
+import { getSupabasePublishedEvents } from '../utils/supabaseEventStorage'
 
 function Profile() {
   const navigate = useNavigate()
 
-  const participant = getCurrentParticipant()
   const programInfo = getProgramInfo()
 
-  const storedEvents = getStoredEvents()
+  const [participant, setParticipant] = useState(getCurrentParticipant())
+  const [publishedEvents, setPublishedEvents] = useState([])
 
-  const publishedEvents = storedEvents.filter((eventItem) => {
-    return eventItem.published !== false
-  })
+  useEffect(() => {
+    async function loadProfileData() {
+      const currentParticipant = getCurrentParticipant()
+
+      if (!currentParticipant) {
+        navigate('/login')
+        return
+      }
+
+      const freshParticipant = await refreshCurrentParticipant()
+
+      if (!freshParticipant) {
+        navigate('/login')
+        return
+      }
+
+      const supabaseEvents = await getSupabasePublishedEvents()
+
+      setParticipant(freshParticipant)
+      setPublishedEvents(supabaseEvents)
+    }
+
+    loadProfileData()
+  }, [navigate])
 
   function getInitials(name) {
     if (!name) {
@@ -42,42 +65,15 @@ function Profile() {
   }
 
   function getGroupShortLabel(groupName) {
-  if (!groupName) {
-    return '-'
+    if (!groupName) {
+      return '-'
+    }
+
+    return groupName
+      .replace('Group ', '')
+      .replace('Skupina ', '')
+      .trim()
   }
-
-  return groupName
-    .replace('Group ', '')
-    .replace('Skupina ', '')
-    .trim()
-}
-
-  function getGroupDisplayLabel(groupName) {
-  if (!groupName) {
-    return '-'
-  }
-
-  const directMatch = adminOptions.groups.find((group) => group === groupName)
-
-  if (directMatch) {
-    return directMatch
-  }
-
-  const groupLetter = groupName
-    .replace('Group ', '')
-    .replace('Skupina ', '')
-    .trim()
-
-  const matchingGroup = adminOptions.groups.find((group) => {
-    return group.includes(groupLetter)
-  })
-
-  if (matchingGroup) {
-    return matchingGroup
-  }
-
-  return groupName
-}
 
   function handleLogout() {
     logoutCurrentParticipant()
@@ -85,7 +81,6 @@ function Profile() {
   }
 
   if (!participant) {
-    navigate('/login')
     return null
   }
 

@@ -1,9 +1,15 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import '../styles/dashboard.css'
-import { getStoredEvents, saveStoredEvents, resetStoredEvents } from '../utils/eventStorage'
 import { getAdminOptions } from '../utils/adminOptionsStorage'
 import { supabase } from '../lib/supabaseClient'
+import {
+  getSupabaseEvents,
+  createSupabaseEvent,
+  updateSupabaseEvent,
+  deleteSupabaseEvent,
+  toggleSupabaseEventPublished,
+} from '../utils/supabaseEventStorage'
 
 function AdminEvents() {
   const navigate = useNavigate()
@@ -11,6 +17,8 @@ function AdminEvents() {
   const [events, setEvents] = useState([])
   const [adminOptions, setAdminOptions] = useState(getAdminOptions())
   const [editingEvent, setEditingEvent] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
 
   const [activeAdminFilter, setActiveAdminFilter] = useState('all')
   const [categoryFilter, setCategoryFilter] = useState('all')
@@ -42,19 +50,23 @@ function AdminEvents() {
   const [formData, setFormData] = useState(emptyForm)
 
   useEffect(() => {
-    setEvents(getStoredEvents())
+    loadEvents()
     setAdminOptions(getAdminOptions())
   }, [])
+
+  async function loadEvents() {
+    setIsLoading(true)
+
+    const supabaseEvents = await getSupabaseEvents()
+
+    setEvents(supabaseEvents)
+    setIsLoading(false)
+  }
 
   async function handleLogout() {
     await supabase.auth.signOut()
     localStorage.removeItem('miniEraAdminLoggedIn')
     navigate('/admin-login')
-  }
-
-  function updateEvents(nextEvents) {
-    setEvents(nextEvents)
-    saveStoredEvents(nextEvents)
   }
 
   function handleChange(event) {
@@ -66,8 +78,18 @@ function AdminEvents() {
     })
   }
 
-  function handleSubmit(event) {
+  function resetForm() {
+    setFormData({
+      ...emptyForm,
+      category: adminOptions.eventCategories?.[0] || 'Prednášky',
+      program: adminOptions.programs?.[0] || 'All participants',
+      organizer: adminOptions.locations?.[0] || '',
+    })
+  }
+
+  async function handleSubmit(event) {
     event.preventDefault()
+    setIsSaving(true)
 
     const cleanedEvent = {
       ...formData,
@@ -79,32 +101,36 @@ function AdminEvents() {
       capacity: Number(formData.capacity) || 0,
       registered: Number(formData.registered) || 0,
       image: formData.image.trim(),
+      published: formData.published !== false,
     }
 
     if (editingEvent) {
-      const updatedEvents = events.map((eventItem) =>
-        eventItem.id === editingEvent.id
-          ? { ...cleanedEvent, id: editingEvent.id }
-          : eventItem
-      )
+      const updatedEvent = await updateSupabaseEvent(editingEvent.id, cleanedEvent)
 
-      updateEvents(updatedEvents)
-      setEditingEvent(null)
-    } else {
-      const newEvent = {
-        ...cleanedEvent,
-        id: Date.now().toString(),
+      if (updatedEvent) {
+        setEvents((currentEvents) =>
+          currentEvents.map((eventItem) =>
+            eventItem.id === editingEvent.id ? updatedEvent : eventItem
+          )
+        )
+
+        setEditingEvent(null)
+        resetForm()
+      } else {
+        alert('Aktivitu sa nepodarilo uložiť. Skontroluj konzolu alebo Supabase.')
       }
+    } else {
+      const createdEvent = await createSupabaseEvent(cleanedEvent)
 
-      updateEvents([newEvent, ...events])
+      if (createdEvent) {
+        setEvents((currentEvents) => [createdEvent, ...currentEvents])
+        resetForm()
+      } else {
+        alert('Aktivitu sa nepodarilo pridať. Skontroluj konzolu alebo Supabase.')
+      }
     }
 
-    setFormData({
-      ...emptyForm,
-      category: adminOptions.eventCategories?.[0] || 'Prednášky',
-      program: adminOptions.programs?.[0] || 'All participants',
-      organizer: adminOptions.locations?.[0] || '',
-    })
+    setIsSaving(false)
   }
 
   function handleEdit(eventItem) {
@@ -117,6 +143,7 @@ function AdminEvents() {
       program: eventItem.program || adminOptions.programs?.[0] || 'All participants',
       organizer: eventItem.organizer || adminOptions.locations?.[0] || '',
       image: eventItem.image || '',
+      published: eventItem.published !== false,
     })
 
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -124,52 +151,56 @@ function AdminEvents() {
 
   function handleCancelEdit() {
     setEditingEvent(null)
-
-    setFormData({
-      ...emptyForm,
-      category: adminOptions.eventCategories?.[0] || 'Prednášky',
-      program: adminOptions.programs?.[0] || 'All participants',
-      organizer: adminOptions.locations?.[0] || '',
-    })
+    resetForm()
   }
 
-  function handleDelete(id) {
-    const confirmed = window.confirm('Naozaj chceš zmazať túto aktivitu? Táto akcia sa nedá vrátiť späť.')
-
-    if (!confirmed) return
-
-    const filteredEvents = events.filter((eventItem) => eventItem.id !== id)
-    updateEvents(filteredEvents)
-  }
-
-  function togglePublished(id) {
-    const updatedEvents = events.map((eventItem) =>
-      eventItem.id === id
-        ? { ...eventItem, published: eventItem.published === false }
-        : eventItem
-    )
-
-    updateEvents(updatedEvents)
-  }
-
-  function handleReset() {
+  async function handleDelete(id) {
     const confirmed = window.confirm(
-      'Obnoviť ukážkové aktivity? Táto akcia prepíše aktuálne aktivity uložené v prehliadači.'
+      'Naozaj chceš zmazať túto aktivitu? Táto akcia sa nedá vrátiť späť.'
     )
 
     if (!confirmed) return
 
-    const resetEvents = resetStoredEvents()
+    const deleteWasSuccessful = await deleteSupabaseEvent(id)
 
-    setEvents(resetEvents)
-    setEditingEvent(null)
+    if (deleteWasSuccessful) {
+      setEvents((currentEvents) =>
+        currentEvents.filter((eventItem) => eventItem.id !== id)
+      )
+
+      if (editingEvent?.id === id) {
+        setEditingEvent(null)
+        resetForm()
+      }
+    } else {
+      alert('Aktivitu sa nepodarilo zmazať. Skontroluj konzolu alebo Supabase.')
+    }
+  }
+
+  async function togglePublished(eventItem) {
+  const toggleWasSuccessful = await toggleSupabaseEventPublished(eventItem)
+
+  if (toggleWasSuccessful) {
     setActiveAdminFilter('all')
     setCategoryFilter('all')
     setProgramFilter('all')
     setOrganizerFilter('all')
     setDayFilter('all')
-    handleCancelEdit()
+
+    await loadEvents()
+  } else {
+    alert('Stav aktivity sa nepodarilo zmeniť. Skontroluj konzolu alebo Supabase.')
   }
+}
+
+  async function handleRefresh() {
+  setActiveAdminFilter('all')
+  setCategoryFilter('all')
+  setProgramFilter('all')
+  setOrganizerFilter('all')
+  setDayFilter('all')
+  await loadEvents()
+}
 
   function getCategoryLabel(category) {
     if (category === 'Lectures') return 'Prednášky'
@@ -218,7 +249,7 @@ function AdminEvents() {
 
     if (activeAdminFilter === 'published' && eventItem.published === false) {
       return false
-      }
+    }
 
     if (activeAdminFilter === 'drafts' && eventItem.published !== false) {
       return false
@@ -425,16 +456,20 @@ function AdminEvents() {
             </label>
 
             <div className="admin-form-actions">
-              <button type="submit">
-                {editingEvent ? 'Uložiť zmeny' : 'Pridať aktivitu'}
+              <button type="submit" disabled={isSaving}>
+                {isSaving
+                  ? 'Ukladám...'
+                  : editingEvent
+                    ? 'Uložiť zmeny'
+                    : 'Pridať aktivitu'}
               </button>
 
               <button
                 type="button"
                 className="admin-reset-button"
-                onClick={handleReset}
+                onClick={handleRefresh}
               >
-                Obnoviť ukážkové aktivity
+                Načítať zo Supabase
               </button>
             </div>
           </form>
@@ -537,7 +572,14 @@ function AdminEvents() {
         </section>
 
         <section className="admin-events-list">
-          {filteredAdminEvents.map((eventItem) => {
+          {isLoading && (
+            <div className="admin-empty-state">
+              <h3>Načítavam aktivity...</h3>
+              <p>Aktivity sa načítavajú zo Supabase.</p>
+            </div>
+          )}
+
+          {!isLoading && filteredAdminEvents.map((eventItem) => {
             const isFull = isEventFull(eventItem)
             const availableSpots = getAvailableSpots(eventItem)
 
@@ -585,7 +627,7 @@ function AdminEvents() {
                 </div>
 
                 <div className="admin-row-actions">
-                  <button onClick={() => togglePublished(eventItem.id)}>
+                  <button onClick={() => togglePublished(eventItem)}>
                     {eventItem.published !== false ? 'Skryť' : 'Zverejniť'}
                   </button>
 
@@ -601,7 +643,7 @@ function AdminEvents() {
             )
           })}
 
-          {filteredAdminEvents.length === 0 && (
+          {!isLoading && filteredAdminEvents.length === 0 && (
             <div className="admin-empty-state">
               <h3>Žiadne aktivity</h3>
               <p>V tomto filtri momentálne nie sú žiadne aktivity.</p>

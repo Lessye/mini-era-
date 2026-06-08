@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabaseClient'
+import { getSupabaseParticipantByEmail } from './supabaseParticipantStorage'
 
 const CURRENT_PARTICIPANT_KEY = 'miniEraCurrentParticipant'
 
@@ -9,7 +9,12 @@ export function getCurrentParticipant() {
     return null
   }
 
-  return JSON.parse(storedParticipant)
+  try {
+    return JSON.parse(storedParticipant)
+  } catch (error) {
+    localStorage.removeItem(CURRENT_PARTICIPANT_KEY)
+    return null
+  }
 }
 
 export function getCurrentParticipantEmail() {
@@ -19,7 +24,7 @@ export function getCurrentParticipantEmail() {
     return ''
   }
 
-  return currentParticipant.email
+  return currentParticipant.email || ''
 }
 
 export function saveCurrentParticipant(participant) {
@@ -28,6 +33,24 @@ export function saveCurrentParticipant(participant) {
 
 export function logoutCurrentParticipant() {
   localStorage.removeItem(CURRENT_PARTICIPANT_KEY)
+}
+
+export async function refreshCurrentParticipant() {
+  const currentParticipant = getCurrentParticipant()
+
+  if (!currentParticipant?.email) {
+    return null
+  }
+
+  const freshParticipant = await getSupabaseParticipantByEmail(currentParticipant.email)
+
+  if (!freshParticipant) {
+    logoutCurrentParticipant()
+    return null
+  }
+
+  saveCurrentParticipant(freshParticipant)
+  return freshParticipant
 }
 
 export async function loginParticipantByEmail(email) {
@@ -40,23 +63,19 @@ export async function loginParticipantByEmail(email) {
     }
   }
 
-  const { data, error } = await supabase
-    .from('participants')
-    .select('*')
-    .eq('email', cleanEmail)
-    .single()
+  const participant = await getSupabaseParticipantByEmail(cleanEmail)
 
-  if (error || !data) {
+  if (!participant) {
     return {
       success: false,
       message: 'This email is not registered for MiniEra.',
     }
   }
 
-  saveCurrentParticipant(data)
+  saveCurrentParticipant(participant)
 
   return {
     success: true,
-    participant: data,
+    participant,
   }
 }

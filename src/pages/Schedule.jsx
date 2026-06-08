@@ -1,36 +1,55 @@
 import '../styles/dashboard.css'
-import { Link } from 'react-router-dom'
-import { useState } from 'react'
-import { getStoredEvents } from '../utils/eventStorage'
-import { getJoinedEvents } from '../utils/joinedEventsStorage'
+import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { getProgramInfo } from '../utils/programInfoStorage'
 import { getAdminOptions } from '../utils/adminOptionsStorage'
+import { refreshCurrentParticipant } from '../utils/participantLoginStorage'
+import { getSupabasePublishedEvents } from '../utils/supabaseEventStorage'
+import { getSupabaseJoinedEvents } from '../utils/supabaseJoinedEventsStorage'
 
 function Schedule() {
+  const navigate = useNavigate()
+
   const [activeDay, setActiveDay] = useState(1)
+  const [events, setEvents] = useState([])
+  const [joinedEvents, setJoinedEvents] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
 
   const programInfo = getProgramInfo()
   const adminOptions = getAdminOptions()
 
-  const storedEvents = getStoredEvents()
-  const joinedEvents = getJoinedEvents()
+  useEffect(() => {
+    loadScheduleEvents()
+  }, [])
+
+  async function loadScheduleEvents() {
+    setIsLoading(true)
+
+    const participant = await refreshCurrentParticipant()
+
+    if (!participant) {
+      navigate('/login')
+      return
+    }
+
+    const publishedEvents = await getSupabasePublishedEvents()
+    const supabaseJoinedEvents = await getSupabaseJoinedEvents()
+
+    setEvents(publishedEvents)
+    setJoinedEvents(supabaseJoinedEvents)
+    setIsLoading(false)
+  }
 
   const joinedEventsWithFreshData = joinedEvents
     .map((joinedItem) => {
-      const freshEvent = storedEvents.find((eventItem) => {
-        return eventItem.id === joinedItem.eventId
+      const freshEvent = events.find((eventItem) => {
+        return String(eventItem.id) === String(joinedItem.eventId)
       })
 
-      // IMPORTANT:
-      // If the original event was deleted from admin, return null.
-      // We do NOT want to keep showing the old joinedItem.event backup.
       if (!freshEvent) {
         return null
       }
 
-      // IMPORTANT:
-      // If the event was hidden/unpublished in admin, return null.
-      // This removes it from the participant schedule.
       if (freshEvent.published === false) {
         return null
       }
@@ -70,37 +89,32 @@ function Schedule() {
     return 1
   }
 
-  function getCategoryLabel(category) {
-    const matchingCategory = adminOptions.eventCategories.find((categoryItem) => {
-      return categoryItem.value === category || categoryItem.label === category
-    })
-
-    if (matchingCategory) {
-      return matchingCategory.label
-    }
-
-    if (category === 'Lectures') return 'Prednáška'
-    if (category === 'Workshops') return 'Workshop'
-    if (category === 'Companies') return 'Firma'
-    if (category === 'Social') return 'Social'
-
-    return 'Aktivita'
-  }
-
   function getProgramLabel(program) {
     if (!program) {
       return ''
     }
 
+    if (!Array.isArray(adminOptions.programs)) {
+      return program
+    }
+
     const matchingProgram = adminOptions.programs.find((programItem) => {
+      if (typeof programItem === 'string') {
+        return programItem === program
+      }
+
       return programItem.value === program || programItem.label === program
     })
 
-    if (matchingProgram) {
-      return matchingProgram.label
+    if (!matchingProgram) {
+      return program
     }
 
-    return program
+    if (typeof matchingProgram === 'string') {
+      return matchingProgram
+    }
+
+    return matchingProgram.label || matchingProgram.value || program
   }
 
   const filteredJoinedEvents = joinedEventsWithFreshData.filter((joinedItem) => {
@@ -139,7 +153,15 @@ function Schedule() {
       </div>
 
       <div className="schedule-list">
-        {filteredJoinedEvents.length === 0 ? (
+        {isLoading ? (
+          <div className="detail-info-box">
+            <h3>Načítavam program...</h3>
+
+            <p>
+              Tvoj osobný program sa načítava zo Supabase.
+            </p>
+          </div>
+        ) : filteredJoinedEvents.length === 0 ? (
           <div className="detail-info-box">
             <h3>Žiadne aktivity v tomto dni</h3>
 
@@ -186,8 +208,6 @@ function Schedule() {
                         </p>
                       )}
                     </div>
-
-                    
                   </div>
                 </div>
               </Link>

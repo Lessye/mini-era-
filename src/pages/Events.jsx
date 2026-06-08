@@ -1,14 +1,15 @@
 import '../styles/dashboard.css'
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { getStoredEvents, saveStoredEvents } from '../utils/eventStorage'
 import { getAdminOptions } from '../utils/adminOptionsStorage'
-import {
-  addJoinedEvent,
-  removeJoinedEvent,
-  isEventJoined,
-} from '../utils/joinedEventsStorage'
 import { getProgramInfo } from '../utils/programInfoStorage'
+import { refreshCurrentParticipant } from '../utils/participantLoginStorage'
+import { getSupabasePublishedEvents } from '../utils/supabaseEventStorage'
+import {
+  addSupabaseJoinedEvent,
+  removeSupabaseJoinedEvent,
+  getSupabaseJoinedEvents,
+} from '../utils/supabaseJoinedEventsStorage'
 
 function Events() {
   const location = useLocation()
@@ -20,33 +21,56 @@ function Events() {
   const [activeFilter, setActiveFilter] = useState('All')
   const [events, setEvents] = useState([])
   const [adminOptions, setAdminOptions] = useState(getAdminOptions())
+  const [joinedEventIds, setJoinedEventIds] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const storedEvents = getStoredEvents()
-    const storedAdminOptions = getAdminOptions()
-
-    setEvents(storedEvents)
-    setAdminOptions(storedAdminOptions)
+    loadEventsPageData()
   }, [location.pathname, location.key])
+
+  async function loadEventsPageData() {
+    setIsLoading(true)
+
+    const participant = await refreshCurrentParticipant()
+
+    if (!participant) {
+      navigate('/login')
+      return
+    }
+
+    const supabaseEvents = await getSupabasePublishedEvents()
+    const joinedItems = await getSupabaseJoinedEvents()
+
+    const joinedIds = joinedItems.map((joinedItem) => {
+      return joinedItem.eventId
+    })
+
+    setEvents(supabaseEvents)
+    setJoinedEventIds(joinedIds)
+    setAdminOptions(getAdminOptions())
+    setIsLoading(false)
+  }
+
+  async function loadPublishedEvents() {
+    const supabaseEvents = await getSupabasePublishedEvents()
+
+    setEvents(supabaseEvents)
+  }
+
+  async function loadJoinedEvents() {
+    const joinedItems = await getSupabaseJoinedEvents()
+
+    const joinedIds = joinedItems.map((joinedItem) => {
+      return joinedItem.eventId
+    })
+
+    setJoinedEventIds(joinedIds)
+  }
 
   const categoryFilters = [
     'All',
     ...(adminOptions.eventCategories || []),
   ]
-
-  const publishedEvents = events.filter((eventItem) => {
-    return eventItem.published !== false
-  })
-
-  const filteredEvents = publishedEvents.filter((eventItem) => {
-    const eventCategory = getCategoryLabel(eventItem.category)
-
-    const matchesDay = eventItem.day === activeDay
-    const matchesFilter =
-      activeFilter === 'All' || eventCategory === activeFilter
-
-    return matchesDay && matchesFilter
-  })
 
   function getCategoryLabel(category) {
     if (category === 'Lectures') return 'Prednášky'
@@ -56,6 +80,16 @@ function Events() {
 
     return category
   }
+
+  const filteredEvents = events.filter((eventItem) => {
+    const eventCategory = getCategoryLabel(eventItem.category)
+
+    const matchesDay = eventItem.day === activeDay
+    const matchesFilter =
+      activeFilter === 'All' || eventCategory === activeFilter
+
+    return matchesDay && matchesFilter
+  })
 
   function getEventGradient(category) {
     const categoryLabel = getCategoryLabel(category).toLowerCase()
@@ -91,10 +125,17 @@ function Events() {
     })
   }
 
-  function handleToggleJoin(eventItem, event) {
+  async function handleToggleJoin(eventItem, event) {
     event.stopPropagation()
 
-    const alreadyJoined = isEventJoined(eventItem.id)
+    const participant = await refreshCurrentParticipant()
+
+    if (!participant) {
+      navigate('/login')
+      return
+    }
+
+    const alreadyJoined = joinedEventIds.includes(eventItem.id)
     const spotsLeft = Number(eventItem.capacity) - Number(eventItem.registered)
     const isFull = spotsLeft <= 0
 
@@ -102,39 +143,21 @@ function Events() {
       return
     }
 
-    let newRegisteredNumber = Number(eventItem.registered)
+    let result
 
     if (alreadyJoined) {
-      const removeResult = removeJoinedEvent(eventItem.id)
-
-      if (!removeResult.success) {
-        return
-      }
-
-      newRegisteredNumber = Math.max(Number(eventItem.registered) - 1, 0)
+      result = await removeSupabaseJoinedEvent(eventItem.id)
     } else {
-      const joinResult = addJoinedEvent(eventItem)
-
-      if (!joinResult.success) {
-        return
-      }
-
-      newRegisteredNumber = Number(eventItem.registered) + 1
+      result = await addSupabaseJoinedEvent(eventItem)
     }
 
-    const updatedEvents = events.map((storedEvent) => {
-      if (storedEvent.id === eventItem.id) {
-        return {
-          ...storedEvent,
-          registered: newRegisteredNumber,
-        }
-      }
+    if (!result.success) {
+      alert('Zmena účasti sa nepodarila. Skús to znova.')
+      return
+    }
 
-      return storedEvent
-    })
-
-    saveStoredEvents(updatedEvents)
-    setEvents(updatedEvents)
+    await loadJoinedEvents()
+    await loadPublishedEvents()
   }
 
   return (
@@ -180,7 +203,17 @@ function Events() {
         ))}
       </div>
 
-      {filteredEvents.length === 0 && (
+      {isLoading && (
+        <div className="empty-events-card">
+          <h3>Načítavam aktivity...</h3>
+
+          <p>
+            Aktivity sa načítavajú zo Supabase.
+          </p>
+        </div>
+      )}
+
+      {!isLoading && filteredEvents.length === 0 && (
         <div className="empty-events-card">
           <h3>Žiadne aktivity</h3>
 
@@ -190,12 +223,12 @@ function Events() {
         </div>
       )}
 
-      {filteredEvents.map((eventItem) => {
+      {!isLoading && filteredEvents.map((eventItem) => {
         const spotsLeft =
           Number(eventItem.capacity) - Number(eventItem.registered)
 
         const isFull = spotsLeft <= 0
-        const alreadyJoined = isEventJoined(eventItem.id)
+        const alreadyJoined = joinedEventIds.includes(eventItem.id)
 
         const hasImage =
           eventItem.image && eventItem.image.trim() !== ''

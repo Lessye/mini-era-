@@ -1,14 +1,15 @@
 import '../styles/dashboard.css'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import logo from '../assets/logo.svg'
-import { getStoredEvents, saveStoredEvents } from '../utils/eventStorage'
 import { getAdminOptions } from '../utils/adminOptionsStorage'
+import { refreshCurrentParticipant } from '../utils/participantLoginStorage'
+import { getSupabaseEventById } from '../utils/supabaseEventStorage'
 import {
-  addJoinedEvent,
-  removeJoinedEvent,
-  isEventJoined,
-} from '../utils/joinedEventsStorage'
+  addSupabaseJoinedEvent,
+  removeSupabaseJoinedEvent,
+  isSupabaseEventJoined,
+} from '../utils/supabaseJoinedEventsStorage'
 
 function EventDetail() {
   const navigate = useNavigate()
@@ -18,68 +19,75 @@ function EventDetail() {
   const clickedEvent = location.state?.eventItem
   const adminOptions = getAdminOptions()
 
-  function getFreshClickedEvent() {
-    const storedEvents = getStoredEvents()
-
-    if (clickedEvent) {
-      const freshEvent = storedEvents.find((eventItem) => {
-        return String(eventItem.id) === String(clickedEvent.id)
-      })
-
-      return freshEvent || clickedEvent
-    }
-
-    if (eventId) {
-      const freshEvent = storedEvents.find((eventItem) => {
-        return String(eventItem.id) === String(eventId)
-      })
-
-      return freshEvent || null
-    }
-
-    return null
-  }
-
-  const initialEvent = getFreshClickedEvent()
-
-  const [currentEvent, setCurrentEvent] = useState(initialEvent)
+  const [currentEvent, setCurrentEvent] = useState(clickedEvent || null)
+  const [isLoading, setIsLoading] = useState(true)
   const [showJoinConfirmation, setShowJoinConfirmation] = useState(false)
   const [joinPopupMessage, setJoinPopupMessage] = useState('')
-  const [hasJoinedEvent, setHasJoinedEvent] = useState(
-    initialEvent ? isEventJoined(initialEvent.id) : false
-  )
+  const [hasJoinedEvent, setHasJoinedEvent] = useState(false)
+  const [isSavingJoinChange, setIsSavingJoinChange] = useState(false)
 
-  if (!currentEvent || currentEvent.published === false) {
-    return (
-      <div className="dashboard">
-        <div className="detail-content">
-          <div className="detail-info-box">
-            <h3>Aktivita sa nenašla</h3>
+  useEffect(() => {
+    loadEventDetail()
+  }, [eventId])
 
-            <p>
-              Táto aktivita už neexistuje, nie je zverejnená alebo nebola
-              správne načítaná.
-            </p>
+  async function loadEventDetail() {
+    setIsLoading(true)
 
-            <button
-              className="main-cta-btn"
-              onClick={() => navigate('/events')}
-            >
-              Späť na aktivity
-            </button>
-          </div>
-        </div>
-      </div>
-    )
+    const participant = await refreshCurrentParticipant()
+
+    if (!participant) {
+      navigate('/login')
+      return
+    }
+
+    if (!eventId && clickedEvent) {
+      const joinedStatus = await isSupabaseEventJoined(clickedEvent.id)
+
+      setCurrentEvent(clickedEvent)
+      setHasJoinedEvent(joinedStatus)
+      setIsLoading(false)
+      return
+    }
+
+    if (!eventId) {
+      setCurrentEvent(null)
+      setIsLoading(false)
+      return
+    }
+
+    const freshEvent = await getSupabaseEventById(eventId)
+
+    if (!freshEvent || freshEvent.published === false) {
+      setCurrentEvent(null)
+      setIsLoading(false)
+      return
+    }
+
+    const joinedStatus = await isSupabaseEventJoined(freshEvent.id)
+
+    setCurrentEvent(freshEvent)
+    setHasJoinedEvent(joinedStatus)
+    setIsLoading(false)
   }
 
-  const capacity = Number(currentEvent.capacity) || 0
-  const registered = Number(currentEvent.registered) || 0
-  const isFull = capacity > 0 && registered >= capacity
-  const spotsLeft = Math.max(capacity - registered, 0)
+  async function refreshEventAfterJoinChange(eventIdToRefresh) {
+    if (!eventIdToRefresh) {
+      return
+    }
 
-  const hasMapsUrl =
-    currentEvent.mapsUrl && currentEvent.mapsUrl.trim() !== ''
+    const freshEvent = await getSupabaseEventById(eventIdToRefresh)
+
+    if (!freshEvent || freshEvent.published === false) {
+      setCurrentEvent(null)
+      setHasJoinedEvent(false)
+      return
+    }
+
+    const joinedStatus = await isSupabaseEventJoined(freshEvent.id)
+
+    setCurrentEvent(freshEvent)
+    setHasJoinedEvent(joinedStatus)
+  }
 
   function getOptionLabel(optionsArray, savedValue) {
     if (!savedValue) {
@@ -144,70 +152,65 @@ function EventDetail() {
   }
 
   function getOrganizerLabel(organizerValue) {
-  if (!organizerValue) {
-    return ''
-  }
-
-  const dynamicLabel = getOptionLabel(adminOptions.locations, organizerValue)
-
-  if (dynamicLabel && dynamicLabel !== organizerValue) {
-    return dynamicLabel
-  }
-
-  if (organizerValue.includes('Comenius University')) {
-    const matchingOrganizer = adminOptions.locations.find((locationItem) => {
-      return locationItem.includes('Komenského')
-    })
-
-    if (matchingOrganizer) {
-      return matchingOrganizer
+    if (!organizerValue) {
+      return ''
     }
+
+    const dynamicLabel = getOptionLabel(adminOptions.locations, organizerValue)
+
+    if (dynamicLabel && dynamicLabel !== organizerValue) {
+      return dynamicLabel
+    }
+
+    if (organizerValue.includes('Comenius University')) {
+      const matchingOrganizer = adminOptions.locations.find((locationItem) => {
+        return locationItem.includes('Komenského')
+      })
+
+      if (matchingOrganizer) {
+        return matchingOrganizer
+      }
+    }
+
+    return organizerValue
   }
 
-  return organizerValue
-}
+  function getDayLabel(dayValue) {
+    if (!dayValue) {
+      return ''
+    }
 
-function getDayLabel(dayValue) {
-  if (!dayValue) {
-    return ''
+    if (dayValue === 'Day 1') return 'Deň 1'
+    if (dayValue === 'Day 2') return 'Deň 2'
+    if (dayValue === 'Day 3') return 'Deň 3'
+    if (dayValue === 'Day 4') return 'Deň 4'
+
+    return dayValue
   }
 
-  if (dayValue === 'Day 1') return 'Deň 1'
-  if (dayValue === 'Day 2') return 'Deň 2'
-  if (dayValue === 'Day 3') return 'Deň 3'
-  if (dayValue === 'Day 4') return 'Deň 4'
-
-  return dayValue
-}
   function openGoogleMaps() {
-    if (!hasMapsUrl) {
+    if (!currentEvent || !currentEvent.mapsUrl) {
       return
     }
 
     window.open(currentEvent.mapsUrl, '_blank', 'noopener,noreferrer')
   }
 
-  function updateStoredEventCapacity(newRegisteredNumber) {
-    const storedEvents = getStoredEvents()
-
-    const updatedEvents = storedEvents.map((eventItem) => {
-      if (String(eventItem.id) === String(currentEvent.id)) {
-        return {
-          ...eventItem,
-          registered: newRegisteredNumber,
-        }
-      }
-
-      return eventItem
-    })
-
-    saveStoredEvents(updatedEvents)
-  }
-
-  function handleJoinEvent() {
-    if (!currentEvent) {
+  async function handleJoinEvent() {
+    if (!currentEvent || isSavingJoinChange) {
       return
     }
+
+    const participant = await refreshCurrentParticipant()
+
+    if (!participant) {
+      navigate('/login')
+      return
+    }
+
+    const capacity = Number(currentEvent.capacity) || 0
+    const registered = Number(currentEvent.registered) || 0
+    const isFull = capacity > 0 && registered >= capacity
 
     if (!hasJoinedEvent && isFull) {
       setJoinPopupMessage('Táto aktivita je už obsadená.')
@@ -215,25 +218,21 @@ function getDayLabel(dayValue) {
       return
     }
 
-    if (hasJoinedEvent) {
-      const removeResult = removeJoinedEvent(currentEvent.id)
+    setIsSavingJoinChange(true)
 
-      if (!removeResult.success) {
-        setJoinPopupMessage('Táto aktivita nie je v tvojom osobnom programe.')
+    if (hasJoinedEvent) {
+      const result = await removeSupabaseJoinedEvent(currentEvent.id)
+
+      if (!result.success) {
+        setIsSavingJoinChange(false)
+        setJoinPopupMessage('Účasť sa nepodarilo zrušiť. Skús to znova.')
         setShowJoinConfirmation(true)
         return
       }
 
-      const newRegisteredNumber = Math.max(registered - 1, 0)
+      await refreshEventAfterJoinChange(currentEvent.id)
 
-      updateStoredEventCapacity(newRegisteredNumber)
-
-      setCurrentEvent({
-        ...currentEvent,
-        registered: newRegisteredNumber,
-      })
-
-      setHasJoinedEvent(false)
+      setIsSavingJoinChange(false)
       setJoinPopupMessage(
         'Účasť bola zrušená. Aktivita bola odstránená z tvojho osobného programu.'
       )
@@ -242,32 +241,71 @@ function getDayLabel(dayValue) {
       return
     }
 
-    const joinResult = addJoinedEvent(currentEvent)
+    const result = await addSupabaseJoinedEvent(currentEvent)
 
-    if (!joinResult.success && joinResult.message === 'already_joined') {
-      setHasJoinedEvent(true)
-      setJoinPopupMessage(
-        'Už si prihlásený/á. Táto aktivita je už v tvojom osobnom programe.'
-      )
+    if (!result.success) {
+      setIsSavingJoinChange(false)
+      setJoinPopupMessage('Na aktivitu sa nepodarilo prihlásiť. Skús to znova.')
       setShowJoinConfirmation(true)
       return
     }
 
-    const newRegisteredNumber = registered + 1
+    await refreshEventAfterJoinChange(currentEvent.id)
 
-    updateStoredEventCapacity(newRegisteredNumber)
-
-    setCurrentEvent({
-      ...currentEvent,
-      registered: newRegisteredNumber,
-    })
-
-    setHasJoinedEvent(true)
+    setIsSavingJoinChange(false)
     setJoinPopupMessage(
       'Hotovo. Aktivita bola pridaná do tvojho osobného programu.'
     )
     setShowJoinConfirmation(true)
   }
+
+  if (isLoading) {
+    return (
+      <div className="dashboard">
+        <div className="detail-content">
+          <div className="detail-info-box">
+            <h3>Načítavam aktivitu...</h3>
+
+            <p>
+              Detail aktivity sa načítava zo Supabase.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!currentEvent || currentEvent.published === false) {
+    return (
+      <div className="dashboard">
+        <div className="detail-content">
+          <div className="detail-info-box">
+            <h3>Aktivita sa nenašla</h3>
+
+            <p>
+              Táto aktivita už neexistuje, nie je zverejnená alebo nebola
+              správne načítaná.
+            </p>
+
+            <button
+              className="main-cta-btn"
+              onClick={() => navigate('/events')}
+            >
+              Späť na aktivity
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const capacity = Number(currentEvent.capacity) || 0
+  const registered = Number(currentEvent.registered) || 0
+  const isFull = capacity > 0 && registered >= capacity
+  const spotsLeft = Math.max(capacity - registered, 0)
+
+  const hasMapsUrl =
+    currentEvent.mapsUrl && currentEvent.mapsUrl.trim() !== ''
 
   const programLabel = getProgramLabel(currentEvent.program)
   const locationLabel = getLocationLabel(currentEvent.location)
@@ -334,28 +372,28 @@ function getDayLabel(dayValue) {
         </div>
 
         {(programLabel || organizerLabel || dayLabel) && (
-  <div className="detail-info-box">
-    <h3>Informácie</h3>
+          <div className="detail-info-box">
+            <h3>Informácie</h3>
 
-    {programLabel && (
-      <p>
-        <strong>Program:</strong> {programLabel}
-      </p>
-    )}
+            {programLabel && (
+              <p>
+                <strong>Program:</strong> {programLabel}
+              </p>
+            )}
 
-    {organizerLabel && (
-      <p>
-        <strong>Organizátor:</strong> {organizerLabel}
-      </p>
-    )}
+            {organizerLabel && (
+              <p>
+                <strong>Organizátor:</strong> {organizerLabel}
+              </p>
+            )}
 
-    {dayLabel && (
-      <p>
-        <strong>Deň:</strong> {dayLabel}
-      </p>
-    )}
-  </div>
-)}
+            {dayLabel && (
+              <p>
+                <strong>Deň:</strong> {dayLabel}
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="detail-info-box">
           <h3>Kapacita</h3>
@@ -419,14 +457,16 @@ function getDayLabel(dayValue) {
                 ? 'main-cta-btn cancel-event-btn'
                 : 'main-cta-btn'
           }
-          disabled={isFull && !hasJoinedEvent}
+          disabled={isSavingJoinChange || (isFull && !hasJoinedEvent)}
           onClick={handleJoinEvent}
         >
-          {isFull && !hasJoinedEvent
-            ? 'Obsadené'
-            : hasJoinedEvent
-              ? 'Zrušiť účasť'
-              : 'Pridať sa'}
+          {isSavingJoinChange
+            ? 'Ukladám...'
+            : isFull && !hasJoinedEvent
+              ? 'Obsadené'
+              : hasJoinedEvent
+                ? 'Zrušiť účasť'
+                : 'Pridať sa'}
         </button>
       </div>
 

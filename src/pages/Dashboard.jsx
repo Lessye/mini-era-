@@ -1,34 +1,58 @@
 import '../styles/dashboard.css'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import logo from '../assets/logo.svg'
-import { getStoredEvents } from '../utils/eventStorage'
-import { getJoinedEvents } from '../utils/joinedEventsStorage'
-import { getCurrentParticipant } from '../utils/participantLoginStorage'
+import {
+  getCurrentParticipant,
+  refreshCurrentParticipant,
+} from '../utils/participantLoginStorage'
 import { getProgramInfo } from '../utils/programInfoStorage'
+import { getSupabasePublishedEvents } from '../utils/supabaseEventStorage'
+import { getSupabaseJoinedEvents } from '../utils/supabaseJoinedEventsStorage'
 
 function Dashboard() {
-  const currentParticipant = getCurrentParticipant()
+  const navigate = useNavigate()
+
   const programInfo = getProgramInfo()
 
-  const storedEvents = getStoredEvents()
-  const joinedEvents = getJoinedEvents()
+  const [currentParticipant, setCurrentParticipant] = useState(getCurrentParticipant())
+  const [publishedEvents, setPublishedEvents] = useState([])
+  const [joinedEvents, setJoinedEvents] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
 
-  const publishedEvents = storedEvents.filter((eventItem) => {
-    return eventItem.published !== false
-  })
+  useEffect(() => {
+    loadDashboardEvents()
+  }, [])
+
+  async function loadDashboardEvents() {
+    setIsLoading(true)
+
+    const participant = await refreshCurrentParticipant()
+
+    if (!participant) {
+      navigate('/login')
+      return
+    }
+
+    const supabaseEvents = await getSupabasePublishedEvents()
+    const supabaseJoinedEvents = await getSupabaseJoinedEvents()
+
+    setCurrentParticipant(participant)
+    setPublishedEvents(supabaseEvents)
+    setJoinedEvents(supabaseJoinedEvents)
+    setIsLoading(false)
+  }
 
   const joinedEventsWithFreshData = joinedEvents
     .map((joinedItem) => {
-      const freshEvent = storedEvents.find((eventItem) => {
-        return eventItem.id === joinedItem.eventId
+      const freshEvent = publishedEvents.find((eventItem) => {
+        return String(eventItem.id) === String(joinedItem.eventId)
       })
 
-      // If the event was deleted in admin, do not show the old backup data.
       if (!freshEvent) {
         return null
       }
 
-      // If the event was hidden/unpublished in admin, remove it from dashboard.
       if (freshEvent.published === false) {
         return null
       }
@@ -41,6 +65,10 @@ function Dashboard() {
     .filter((joinedItem) => joinedItem !== null)
 
   const upcomingEvents = joinedEventsWithFreshData.slice(0, 3)
+
+  if (!currentParticipant) {
+    return null
+  }
 
   return (
     <div className="dashboard">
@@ -64,7 +92,7 @@ function Dashboard() {
             </p>
 
             <h3>
-              Vitaj, {currentParticipant?.name || 'účastník'}
+              Vitaj, {currentParticipant.name || 'účastník'}
             </h3>
           </div>
         </div>
@@ -110,7 +138,23 @@ function Dashboard() {
           </Link>
         </div>
 
-        {upcomingEvents.length === 0 ? (
+        {isLoading ? (
+          <div className="today-card">
+            <div>
+              <p className="event-time">Načítavam...</p>
+
+              <h4>Načítavam tvoj program</h4>
+
+              <p className="event-location">
+                Aktivity sa načítavajú zo Supabase.
+              </p>
+            </div>
+
+            <div className="event-tag blue-tag">
+              INFO
+            </div>
+          </div>
+        ) : upcomingEvents.length === 0 ? (
           <div className="today-card">
             <div>
               <p className="event-time">Zatiaľ bez aktivít</p>
