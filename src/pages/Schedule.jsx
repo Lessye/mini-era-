@@ -1,132 +1,143 @@
 import '../styles/dashboard.css'
 import { Link } from 'react-router-dom'
 import { useState } from 'react'
+import { getStoredEvents } from '../utils/eventStorage'
+import { getJoinedEvents } from '../utils/joinedEventsStorage'
 
 function Schedule() {
-
   const [activeDay, setActiveDay] = useState(1)
+
+  const storedEvents = getStoredEvents()
+  const joinedEvents = getJoinedEvents()
+
+  const joinedEventsWithFreshData = joinedEvents
+    .map((joinedItem) => {
+      const freshEvent = storedEvents.find((eventItem) => {
+        return eventItem.id === joinedItem.eventId
+      })
+
+      return {
+        ...joinedItem,
+        event: freshEvent || joinedItem.event,
+      }
+    })
+    .filter((joinedItem) => joinedItem.event)
+
+  function getEventDayNumber(eventItem) {
+    if (!eventItem.day) {
+      return 1
+    }
+
+    if (typeof eventItem.day === 'number') {
+      return eventItem.day
+    }
+
+    if (eventItem.day.includes('1')) {
+      return 1
+    }
+
+    if (eventItem.day.includes('2')) {
+      return 2
+    }
+
+    if (eventItem.day.includes('3')) {
+      return 3
+    }
+
+    if (eventItem.day.includes('4')) {
+      return 4
+    }
+
+    return 1
+  }
+
+  const filteredJoinedEvents = joinedEventsWithFreshData.filter((joinedItem) => {
+    return getEventDayNumber(joinedItem.event) === activeDay
+  })
 
   return (
     <div className="dashboard">
-
       <div className="top-banner">
-
         <div className="events-header-row">
-
           <div>
             <p className="mini-label">MINIERA</p>
 
             <h1 className="events-title">
-              Bratislava, Slovakia
+              My Schedule
             </h1>
           </div>
 
           <div className="date-box">
-            <p>MAR-APR 2025</p>
-            <h3>30.03 — 02.04</h3>
+            <p>JUN 2026</p>
+            <h3>10.06 — 13.06</h3>
           </div>
-
         </div>
 
-<div className="day-tabs">
-  {[1, 2, 3, 4].map((day) => (
-    <div
-      key={day}
-      className={activeDay === day ? 'active-day' : ''}
-      onClick={() => setActiveDay(day)}
-    >
-      Day {day}
-    </div>
-  ))}
-</div>
-
+        <div className="day-tabs">
+          {[1, 2, 3, 4].map((day) => (
+            <div
+              key={day}
+              className={activeDay === day ? 'active-day' : ''}
+              onClick={() => setActiveDay(day)}
+            >
+              Day {day}
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="schedule-list">
+        {filteredJoinedEvents.length === 0 ? (
+          <div className="detail-info-box">
+            <h3>No joined events yet</h3>
 
-        <div className="schedule-item">
+            <p>
+              Events you join will appear here in your personal schedule.
+            </p>
 
-          <div className="schedule-dot green-dot"></div>
-
-          <div className="schedule-content">
-
-            <Link to="/event-detail">
-
-              <div className="schedule-card-new">
-
-                <div className="schedule-top-row">
-                  <p>09:00 - 10:00</p>
-                  <span>SOCIAL</span>
-                </div>
-
-                <h3>Registration & Welcome</h3>
-
-                <p>STU Main Hall</p>
-
-              </div>
-
+            <Link to="/events">
+              <button className="main-cta-btn">
+                Browse Events
+              </button>
             </Link>
-
           </div>
+        ) : (
+          filteredJoinedEvents.map((joinedItem) => {
+            return (
+              <Link
+                to="/event-detail"
+                state={{ eventItem: joinedItem.event }}
+                key={joinedItem.eventId}
+                className="schedule-link"
+              >
+                <div className="schedule-item">
+                  <div className="schedule-dot"></div>
 
-        </div>
+                  <div className="schedule-card-new">
+                    <div>
+                      <p className="schedule-time">
+                        {joinedItem.event.time}
+                      </p>
 
-        <div className="schedule-item">
+                      <h3>
+                        {joinedItem.event.title}
+                      </h3>
 
-          <div className="schedule-dot purple-dot"></div>
+                      <p>
+                        {joinedItem.event.location}
+                      </p>
+                    </div>
 
-          <div className="schedule-content">
-
-            <Link to="/event-detail">
-
-              <div className="schedule-card-new">
-
-                <div className="schedule-top-row">
-                  <p>10:30 - 12:00</p>
-                  <span>LECTURE</span>
+                    <span className="schedule-tag">
+                      {joinedItem.event.category || 'Event'}
+                    </span>
+                  </div>
                 </div>
-
-                <h3>Orientation Session</h3>
-
-                <p>Auditorium A</p>
-
-              </div>
-
-            </Link>
-
-          </div>
-
-        </div>
-
-        <div className="schedule-item">
-
-          <div className="schedule-dot orange-dot"></div>
-
-          <div className="schedule-content">
-
-            <Link to="/event-detail">
-
-              <div className="schedule-card-new">
-
-                <div className="schedule-top-row">
-                  <p>12:30 - 14:00</p>
-                  <span>WORKSHOP</span>
-                </div>
-
-                <h3>Campus Tour & Lunch</h3>
-
-                <p>STU Campus</p>
-
-              </div>
-
-            </Link>
-
-          </div>
-
-        </div>
-
+              </Link>
+            )
+          })
+        )}
       </div>
-
     </div>
   )
 }

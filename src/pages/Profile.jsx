@@ -7,6 +7,7 @@ import profileCalendarIcon from '../assets/icons/profilecalendar.svg'
 import schoolIcon from '../assets/icons/school.svg'
 import settingsIcon from '../assets/icons/settings.svg'
 import logoutIcon from '../assets/icons/logout.svg'
+import { Link } from 'react-router-dom'
 
 function Profile() {
   return (
@@ -161,6 +162,12 @@ function Profile() {
           </div>
 
         </div>
+
+        <Link to="/admin-login">
+          <div className="settings-card">
+            Administrátorský prístup
+           </div>
+        </Link>
 
         <div className="logout-card">
 
