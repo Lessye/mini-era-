@@ -143,6 +143,42 @@ function EventDetail() {
     return getOptionLabel(adminOptions.locations, locationValue)
   }
 
+  function getOrganizerLabel(organizerValue) {
+  if (!organizerValue) {
+    return ''
+  }
+
+  const dynamicLabel = getOptionLabel(adminOptions.locations, organizerValue)
+
+  if (dynamicLabel && dynamicLabel !== organizerValue) {
+    return dynamicLabel
+  }
+
+  if (organizerValue.includes('Comenius University')) {
+    const matchingOrganizer = adminOptions.locations.find((locationItem) => {
+      return locationItem.includes('Komenského')
+    })
+
+    if (matchingOrganizer) {
+      return matchingOrganizer
+    }
+  }
+
+  return organizerValue
+}
+
+function getDayLabel(dayValue) {
+  if (!dayValue) {
+    return ''
+  }
+
+  if (dayValue === 'Day 1') return 'Deň 1'
+  if (dayValue === 'Day 2') return 'Deň 2'
+  if (dayValue === 'Day 3') return 'Deň 3'
+  if (dayValue === 'Day 4') return 'Deň 4'
+
+  return dayValue
+}
   function openGoogleMaps() {
     if (!hasMapsUrl) {
       return
@@ -235,6 +271,8 @@ function EventDetail() {
 
   const programLabel = getProgramLabel(currentEvent.program)
   const locationLabel = getLocationLabel(currentEvent.location)
+  const organizerLabel = getOrganizerLabel(currentEvent.organizer)
+  const dayLabel = getDayLabel(currentEvent.day)
 
   return (
     <div className="dashboard">
@@ -295,29 +333,29 @@ function EventDetail() {
           </p>
         </div>
 
-        {(programLabel || currentEvent.organizer || currentEvent.day) && (
-          <div className="detail-info-box">
-            <h3>Informácie</h3>
+        {(programLabel || organizerLabel || dayLabel) && (
+  <div className="detail-info-box">
+    <h3>Informácie</h3>
 
-            {programLabel && (
-              <p>
-                <strong>Program:</strong> {programLabel}
-              </p>
-            )}
+    {programLabel && (
+      <p>
+        <strong>Program:</strong> {programLabel}
+      </p>
+    )}
 
-            {currentEvent.organizer && (
-              <p>
-                <strong>Organizátor:</strong> {currentEvent.organizer}
-              </p>
-            )}
+    {organizerLabel && (
+      <p>
+        <strong>Organizátor:</strong> {organizerLabel}
+      </p>
+    )}
 
-            {currentEvent.day && (
-              <p>
-                <strong>Deň:</strong> {currentEvent.day}
-              </p>
-            )}
-          </div>
-        )}
+    {dayLabel && (
+      <p>
+        <strong>Deň:</strong> {dayLabel}
+      </p>
+    )}
+  </div>
+)}
 
         <div className="detail-info-box">
           <h3>Kapacita</h3>

@@ -187,9 +187,7 @@ function Schedule() {
                       )}
                     </div>
 
-                    <span className="schedule-tag">
-                      {getCategoryLabel(joinedItem.event.category)}
-                    </span>
+                    
                   </div>
                 </div>
               </Link>

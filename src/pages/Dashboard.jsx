@@ -5,12 +5,10 @@ import { getStoredEvents } from '../utils/eventStorage'
 import { getJoinedEvents } from '../utils/joinedEventsStorage'
 import { getCurrentParticipant } from '../utils/participantLoginStorage'
 import { getProgramInfo } from '../utils/programInfoStorage'
-import { getAdminOptions } from '../utils/adminOptionsStorage'
 
 function Dashboard() {
   const currentParticipant = getCurrentParticipant()
   const programInfo = getProgramInfo()
-  const adminOptions = getAdminOptions()
 
   const storedEvents = getStoredEvents()
   const joinedEvents = getJoinedEvents()
@@ -43,23 +41,6 @@ function Dashboard() {
     .filter((joinedItem) => joinedItem !== null)
 
   const upcomingEvents = joinedEventsWithFreshData.slice(0, 3)
-
-  function getCategoryLabel(category) {
-    const matchingCategory = adminOptions.eventCategories.find((categoryItem) => {
-      return categoryItem.value === category || categoryItem.label === category
-    })
-
-    if (matchingCategory) {
-      return matchingCategory.label
-    }
-
-    if (category === 'Lectures') return 'Prednáška'
-    if (category === 'Workshops') return 'Workshop'
-    if (category === 'Companies') return 'Firma'
-    if (category === 'Social') return 'Social'
-
-    return 'Aktivita'
-  }
 
   return (
     <div className="dashboard">
@@ -146,7 +127,7 @@ function Dashboard() {
             </div>
           </div>
         ) : (
-          upcomingEvents.map((joinedItem, index) => (
+          upcomingEvents.map((joinedItem) => (
             <Link
               to={`/event-detail/${joinedItem.event.id}`}
               state={{ eventItem: joinedItem.event }}
@@ -166,20 +147,6 @@ function Dashboard() {
                   <p className="event-location">
                     {joinedItem.event.location}
                   </p>
-                </div>
-
-                <div
-                  className={
-                    index === 0
-                      ? 'event-tag blue-tag'
-                      : index === 1
-                        ? 'event-tag green-tag'
-                        : 'event-tag pink-tag'
-                  }
-                >
-                  {index === 0
-                    ? 'ĎALŠIE'
-                    : getCategoryLabel(joinedItem.event.category)}
                 </div>
               </div>
             </Link>
