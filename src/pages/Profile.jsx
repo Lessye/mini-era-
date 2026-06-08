@@ -42,12 +42,15 @@ function Profile() {
   }
 
   function getGroupShortLabel(groupName) {
-    if (!groupName) {
-      return '-'
-    }
-
-    return groupName.replace('Group ', '')
+  if (!groupName) {
+    return '-'
   }
+
+  return groupName
+    .replace('Group ', '')
+    .replace('Skupina ', '')
+    .trim()
+}
 
   function getGroupDisplayLabel(groupName) {
   if (!groupName) {
