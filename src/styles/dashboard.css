@@ -2966,3 +2966,30 @@ textarea {
 .schedule-program {
   margin-top: 4px;
 }
+
+.admin-event-form input,
+.admin-event-form select {
+  height: 50px;
+}
+/* Admin dashboard text section styling only */
+.admin-main > .admin-content-card {
+  margin-top: 24px;
+}
+
+.admin-main > .admin-content-card h2 {
+  color: #2b1d78;
+  font-size: 24px;
+  margin-bottom: 10px;
+}
+
+.admin-main > .admin-content-card p {
+  color: #6f6f7a;
+  font-size: 16px;
+  line-height: 1.55;
+  max-width: 760px;
+}
+
+/* Better spacing for the refresh button without changing content */
+.admin-topbar .admin-secondary-btn {
+  margin-top: 18px;
+}
