@@ -1,5 +1,5 @@
 import '../styles/dashboard.css'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import logo from '../assets/logo.svg'
 import {
@@ -12,6 +12,7 @@ import { getSupabaseJoinedEvents } from '../utils/supabaseJoinedEventsStorage'
 
 function Dashboard() {
   const navigate = useNavigate()
+  const location = useLocation()
 
   const programInfo = getProgramInfo()
 
@@ -22,7 +23,7 @@ function Dashboard() {
 
   useEffect(() => {
     loadDashboardEvents()
-  }, [])
+  }, [location.pathname, location.key])
 
   async function loadDashboardEvents() {
     setIsLoading(true)
@@ -43,10 +44,16 @@ function Dashboard() {
     setIsLoading(false)
   }
 
+  function getJoinedEventId(joinedItem) {
+    return joinedItem.eventId || joinedItem.event_id || joinedItem.event?.id || ''
+  }
+
   const joinedEventsWithFreshData = joinedEvents
     .map((joinedItem) => {
+      const joinedEventId = getJoinedEventId(joinedItem)
+
       const freshEvent = publishedEvents.find((eventItem) => {
-        return String(eventItem.id) === String(joinedItem.eventId)
+        return String(eventItem.id) === String(joinedEventId)
       })
 
       if (!freshEvent) {
@@ -59,6 +66,7 @@ function Dashboard() {
 
       return {
         ...joinedItem,
+        eventId: joinedEventId,
         event: freshEvent,
       }
     })

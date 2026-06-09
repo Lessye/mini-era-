@@ -4,17 +4,17 @@ function mapSupabaseEventToReactEvent(eventItem) {
   return {
     id: eventItem.id,
     title: eventItem.title || '',
-    category: eventItem.category || 'Lectures',
-    program: eventItem.program || 'Shared program',
+    category: eventItem.category || 'Prednášky',
+    program: eventItem.program || 'All participants',
     organizer: eventItem.organizer || '',
     day: eventItem.day || 'Day 1',
     date: eventItem.date || '',
     time: eventItem.time || '',
     location: eventItem.location || '',
-    mapsUrl: eventItem.maps_url || '',
+    mapsUrl: eventItem.maps_url || eventItem.mapsUrl || '',
     description: eventItem.description || '',
-    capacity: eventItem.capacity || 0,
-    registered: eventItem.registered || 0,
+    capacity: Number(eventItem.capacity) || 0,
+    registered: Number(eventItem.registered) || 0,
     image: eventItem.image || '',
     published: eventItem.published !== false,
     createdAt: eventItem.created_at || '',
@@ -25,8 +25,8 @@ function mapSupabaseEventToReactEvent(eventItem) {
 function mapReactEventToSupabaseEvent(eventItem) {
   return {
     title: eventItem.title || '',
-    category: eventItem.category || 'Lectures',
-    program: eventItem.program || 'Shared program',
+    category: eventItem.category || 'Prednášky',
+    program: eventItem.program || 'All participants',
     organizer: eventItem.organizer || '',
     day: eventItem.day || 'Day 1',
     date: eventItem.date || null,
@@ -45,15 +45,15 @@ export async function getSupabaseEvents() {
   const { data, error } = await supabase
     .from('events')
     .select('*')
-    .order('date', { ascending: true })
-    .order('time', { ascending: true })
+    .order('date', { ascending: true, nullsFirst: false })
+    .order('time', { ascending: true, nullsFirst: false })
 
   if (error) {
     console.error('Error loading events from Supabase:', error.message)
     return []
   }
 
-  return data.map(mapSupabaseEventToReactEvent)
+  return (data || []).map(mapSupabaseEventToReactEvent)
 }
 
 export async function getSupabasePublishedEvents() {
@@ -61,26 +61,34 @@ export async function getSupabasePublishedEvents() {
     .from('events')
     .select('*')
     .eq('published', true)
-    .order('date', { ascending: true })
-    .order('time', { ascending: true })
+    .order('date', { ascending: true, nullsFirst: false })
+    .order('time', { ascending: true, nullsFirst: false })
 
   if (error) {
     console.error('Error loading published events from Supabase:', error.message)
     return []
   }
 
-  return data.map(mapSupabaseEventToReactEvent)
+  return (data || []).map(mapSupabaseEventToReactEvent)
 }
 
 export async function getSupabaseEventById(eventId) {
+  if (!eventId) {
+    return null
+  }
+
   const { data, error } = await supabase
     .from('events')
     .select('*')
     .eq('id', eventId)
-    .single()
+    .maybeSingle()
 
   if (error) {
     console.error('Error loading event detail from Supabase:', error.message)
+    return null
+  }
+
+  if (!data) {
     return null
   }
 
@@ -105,6 +113,10 @@ export async function createSupabaseEvent(eventItem) {
 }
 
 export async function updateSupabaseEvent(eventId, eventItem) {
+  if (!eventId) {
+    return null
+  }
+
   const updatedEvent = mapReactEventToSupabaseEvent(eventItem)
 
   const { data, error } = await supabase
@@ -123,6 +135,24 @@ export async function updateSupabaseEvent(eventId, eventItem) {
 }
 
 export async function deleteSupabaseEvent(eventId) {
+  if (!eventId) {
+    return false
+  }
+
+  // First try to remove joined-event rows connected to this event.
+  // If this table does not exist or has no rows, the main event delete can still continue.
+  const { error: joinedEventsError } = await supabase
+    .from('joined_events')
+    .delete()
+    .eq('event_id', eventId)
+
+  if (joinedEventsError) {
+    console.warn(
+      'Joined event cleanup skipped or failed:',
+      joinedEventsError.message
+    )
+  }
+
   const { error } = await supabase
     .from('events')
     .delete()
@@ -137,6 +167,10 @@ export async function deleteSupabaseEvent(eventId) {
 }
 
 export async function toggleSupabaseEventPublished(eventItem) {
+  if (!eventItem?.id) {
+    return false
+  }
+
   const newPublishedValue = eventItem.published === false
 
   const { error } = await supabase

@@ -26,28 +26,77 @@ function AdminEvents() {
   const [organizerFilter, setOrganizerFilter] = useState('all')
   const [dayFilter, setDayFilter] = useState('all')
 
-  const defaultCategory = adminOptions.eventCategories?.[0] || 'Prednášky'
-  const defaultProgram = adminOptions.programs?.[0] || 'All participants'
-  const defaultOrganizer = adminOptions.locations?.[0] || ''
+  function getOptionValue(optionItem) {
+    if (typeof optionItem === 'string') {
+      return optionItem
+    }
 
-  const emptyForm = {
-    title: '',
-    category: defaultCategory,
-    program: defaultProgram,
-    organizer: defaultOrganizer,
-    day: 'Day 1',
-    date: '2026-06-10',
-    time: '',
-    location: '',
-    mapsUrl: 'https://maps.google.com',
-    description: '',
-    capacity: 40,
-    registered: 0,
-    image: '',
-    published: true,
+    return (
+      optionItem?.value ||
+      optionItem?.label ||
+      optionItem?.name ||
+      optionItem?.title ||
+      ''
+    )
   }
 
-  const [formData, setFormData] = useState(emptyForm)
+  function getOptionLabel(optionItem) {
+    if (typeof optionItem === 'string') {
+      return optionItem
+    }
+
+    return (
+      optionItem?.label ||
+      optionItem?.name ||
+      optionItem?.title ||
+      optionItem?.value ||
+      ''
+    )
+  }
+
+  function getFirstOptionValue(optionsArray, fallbackValue) {
+    if (!Array.isArray(optionsArray) || optionsArray.length === 0) {
+      return fallbackValue
+    }
+
+    return getOptionValue(optionsArray[0]) || fallbackValue
+  }
+
+  const defaultCategory = getFirstOptionValue(
+    adminOptions.eventCategories,
+    'Prednášky'
+  )
+
+  const defaultProgram = getFirstOptionValue(
+    adminOptions.programs,
+    'All participants'
+  )
+
+  const defaultOrganizer = getFirstOptionValue(
+    adminOptions.locations,
+    ''
+  )
+
+  function createEmptyForm() {
+    return {
+      title: '',
+      category: defaultCategory,
+      program: defaultProgram,
+      organizer: defaultOrganizer,
+      day: 'Day 1',
+      date: '2026-06-10',
+      time: '',
+      location: '',
+      mapsUrl: 'https://maps.google.com',
+      description: '',
+      capacity: 40,
+      registered: 0,
+      image: '',
+      published: true,
+    }
+  }
+
+  const [formData, setFormData] = useState(createEmptyForm())
 
   useEffect(() => {
     loadEvents()
@@ -72,28 +121,41 @@ function AdminEvents() {
   function handleChange(event) {
     const { name, value, type, checked } = event.target
 
-    setFormData({
-      ...formData,
+    setFormData((currentFormData) => ({
+      ...currentFormData,
       [name]: type === 'checkbox' ? checked : value,
-    })
+    }))
   }
 
   function resetForm() {
-    setFormData({
-      ...emptyForm,
-      category: adminOptions.eventCategories?.[0] || 'Prednášky',
-      program: adminOptions.programs?.[0] || 'All participants',
-      organizer: adminOptions.locations?.[0] || '',
-    })
+    setFormData(createEmptyForm())
+  }
+
+  function resetFilters() {
+    setActiveAdminFilter('all')
+    setCategoryFilter('all')
+    setProgramFilter('all')
+    setOrganizerFilter('all')
+    setDayFilter('all')
   }
 
   async function handleSubmit(event) {
     event.preventDefault()
+
+    if (isSaving) {
+      return
+    }
+
     setIsSaving(true)
 
     const cleanedEvent = {
       ...formData,
       title: formData.title.trim(),
+      category: formData.category || defaultCategory,
+      program: formData.program || defaultProgram,
+      organizer: formData.organizer || '',
+      day: formData.day || 'Day 1',
+      date: formData.date || null,
       time: formData.time.trim(),
       location: formData.location.trim(),
       mapsUrl: formData.mapsUrl.trim() || 'https://maps.google.com',
@@ -105,17 +167,16 @@ function AdminEvents() {
     }
 
     if (editingEvent) {
-      const updatedEvent = await updateSupabaseEvent(editingEvent.id, cleanedEvent)
+      const updatedEvent = await updateSupabaseEvent(
+        editingEvent.id,
+        cleanedEvent
+      )
 
       if (updatedEvent) {
-        setEvents((currentEvents) =>
-          currentEvents.map((eventItem) =>
-            eventItem.id === editingEvent.id ? updatedEvent : eventItem
-          )
-        )
-
+        await loadEvents()
         setEditingEvent(null)
         resetForm()
+        resetFilters()
       } else {
         alert('Aktivitu sa nepodarilo uložiť. Skontroluj konzolu alebo Supabase.')
       }
@@ -123,8 +184,9 @@ function AdminEvents() {
       const createdEvent = await createSupabaseEvent(cleanedEvent)
 
       if (createdEvent) {
-        setEvents((currentEvents) => [createdEvent, ...currentEvents])
+        await loadEvents()
         resetForm()
+        resetFilters()
       } else {
         alert('Aktivitu sa nepodarilo pridať. Skontroluj konzolu alebo Supabase.')
       }
@@ -137,11 +199,18 @@ function AdminEvents() {
     setEditingEvent(eventItem)
 
     setFormData({
-      ...emptyForm,
-      ...eventItem,
-      category: getCategoryLabel(eventItem.category),
-      program: eventItem.program || adminOptions.programs?.[0] || 'All participants',
-      organizer: eventItem.organizer || adminOptions.locations?.[0] || '',
+      title: eventItem.title || '',
+      category: eventItem.category || defaultCategory,
+      program: eventItem.program || defaultProgram,
+      organizer: eventItem.organizer || '',
+      day: eventItem.day || 'Day 1',
+      date: eventItem.date || '2026-06-10',
+      time: eventItem.time || '',
+      location: eventItem.location || '',
+      mapsUrl: eventItem.mapsUrl || 'https://maps.google.com',
+      description: eventItem.description || '',
+      capacity: Number(eventItem.capacity) || 0,
+      registered: Number(eventItem.registered) || 0,
       image: eventItem.image || '',
       published: eventItem.published !== false,
     })
@@ -159,14 +228,14 @@ function AdminEvents() {
       'Naozaj chceš zmazať túto aktivitu? Táto akcia sa nedá vrátiť späť.'
     )
 
-    if (!confirmed) return
+    if (!confirmed) {
+      return
+    }
 
     const deleteWasSuccessful = await deleteSupabaseEvent(id)
 
     if (deleteWasSuccessful) {
-      setEvents((currentEvents) =>
-        currentEvents.filter((eventItem) => eventItem.id !== id)
-      )
+      await loadEvents()
 
       if (editingEvent?.id === id) {
         setEditingEvent(null)
@@ -178,29 +247,20 @@ function AdminEvents() {
   }
 
   async function togglePublished(eventItem) {
-  const toggleWasSuccessful = await toggleSupabaseEventPublished(eventItem)
+    const toggleWasSuccessful = await toggleSupabaseEventPublished(eventItem)
 
-  if (toggleWasSuccessful) {
-    setActiveAdminFilter('all')
-    setCategoryFilter('all')
-    setProgramFilter('all')
-    setOrganizerFilter('all')
-    setDayFilter('all')
-
-    await loadEvents()
-  } else {
-    alert('Stav aktivity sa nepodarilo zmeniť. Skontroluj konzolu alebo Supabase.')
+    if (toggleWasSuccessful) {
+      resetFilters()
+      await loadEvents()
+    } else {
+      alert('Stav aktivity sa nepodarilo zmeniť. Skontroluj konzolu alebo Supabase.')
+    }
   }
-}
 
   async function handleRefresh() {
-  setActiveAdminFilter('all')
-  setCategoryFilter('all')
-  setProgramFilter('all')
-  setOrganizerFilter('all')
-  setDayFilter('all')
-  await loadEvents()
-}
+    resetFilters()
+    await loadEvents()
+  }
 
   function getCategoryLabel(category) {
     if (category === 'Lectures') return 'Prednášky'
@@ -208,7 +268,7 @@ function AdminEvents() {
     if (category === 'Companies') return 'Company visits'
     if (category === 'Social') return 'Social'
 
-    return category
+    return category || 'Aktivita'
   }
 
   function getDayLabel(day) {
@@ -232,17 +292,35 @@ function AdminEvents() {
     const capacity = Number(eventItem.capacity) || 0
     const availableSpots = capacity - registered
 
-    if (availableSpots < 0) return 0
+    if (availableSpots < 0) {
+      return 0
+    }
 
     return availableSpots
   }
 
-  const publishedCount = events.filter((eventItem) => eventItem.published !== false).length
-  const draftCount = events.filter((eventItem) => eventItem.published === false).length
-  const fullCount = events.filter((eventItem) => isEventFull(eventItem)).length
+  function doesEventMatchOptionValue(eventValue, selectedValue) {
+    if (selectedValue === 'all') {
+      return true
+    }
+
+    return String(eventValue || '') === String(selectedValue || '')
+  }
+
+  const publishedCount = events.filter((eventItem) => {
+    return eventItem.published !== false
+  }).length
+
+  const draftCount = events.filter((eventItem) => {
+    return eventItem.published === false
+  }).length
+
+  const fullCount = events.filter((eventItem) => {
+    return isEventFull(eventItem)
+  }).length
 
   const filteredAdminEvents = events.filter((eventItem) => {
-    const eventCategory = getCategoryLabel(eventItem.category)
+    const eventCategory = eventItem.category || 'Prednášky'
     const eventProgram = eventItem.program || 'All participants'
     const eventOrganizer = eventItem.organizer || ''
     const eventDay = eventItem.day || 'Day 1'
@@ -259,19 +337,19 @@ function AdminEvents() {
       return false
     }
 
-    if (categoryFilter !== 'all' && eventCategory !== categoryFilter) {
+    if (!doesEventMatchOptionValue(eventCategory, categoryFilter)) {
       return false
     }
 
-    if (programFilter !== 'all' && eventProgram !== programFilter) {
+    if (!doesEventMatchOptionValue(eventProgram, programFilter)) {
       return false
     }
 
-    if (organizerFilter !== 'all' && eventOrganizer !== organizerFilter) {
+    if (!doesEventMatchOptionValue(eventOrganizer, organizerFilter)) {
       return false
     }
 
-    if (dayFilter !== 'all' && eventDay !== dayFilter) {
+    if (!doesEventMatchOptionValue(eventDay, dayFilter)) {
       return false
     }
 
@@ -308,26 +386,37 @@ function AdminEvents() {
         <header className="admin-topbar">
           <div>
             <p className="admin-small-label">SPRÁVA AKTIVÍT</p>
+
             <h1>Aktivity</h1>
+
             <p>
-              Pridávaj nové aktivity, priraď ich k programu, kategórii alebo organizátorovi
-              a rozhodni, ktoré budú viditeľné pre účastníkov.
+              Pridávaj nové aktivity, priraď ich k programu, kategórii alebo
+              organizátorovi a rozhodni, ktoré budú viditeľné pre účastníkov.
             </p>
           </div>
         </header>
 
-        <section className={editingEvent ? 'admin-event-form-card editing-mode' : 'admin-event-form-card'}>
+        <section
+          className={
+            editingEvent
+              ? 'admin-event-form-card editing-mode'
+              : 'admin-event-form-card'
+          }
+        >
           <div className="admin-form-heading-row">
             <div>
               <p className="admin-small-label">
                 {editingEvent ? 'REŽIM ÚPRAVY' : 'NOVÁ AKTIVITA'}
               </p>
 
-              <h2>{editingEvent ? 'Upravuješ aktivitu' : 'Pridať aktivitu'}</h2>
+              <h2>
+                {editingEvent ? 'Upravuješ aktivitu' : 'Pridať aktivitu'}
+              </h2>
 
               {editingEvent && (
                 <p className="admin-editing-note">
-                  Momentálne upravuješ: <strong>{editingEvent.title}</strong>
+                  Momentálne upravuješ:{' '}
+                  <strong>{editingEvent.title}</strong>
                 </p>
               )}
             </div>
@@ -352,31 +441,64 @@ function AdminEvents() {
               required
             />
 
-            <select name="category" value={formData.category} onChange={handleChange}>
-              {(adminOptions.eventCategories || []).map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
+            <select
+              name="category"
+              value={formData.category}
+              onChange={handleChange}
+            >
+              {(adminOptions.eventCategories || []).map((category) => {
+                const value = getOptionValue(category)
+                const label = getOptionLabel(category)
+
+                return (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                )
+              })}
             </select>
 
-            <select name="program" value={formData.program} onChange={handleChange}>
-              {(adminOptions.programs || []).map((program) => (
-                <option key={program} value={program}>
-                  {program}
-                </option>
-              ))}
+            <select
+              name="program"
+              value={formData.program}
+              onChange={handleChange}
+            >
+              {(adminOptions.programs || []).map((program) => {
+                const value = getOptionValue(program)
+                const label = getOptionLabel(program)
+
+                return (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                )
+              })}
             </select>
 
-            <select name="organizer" value={formData.organizer} onChange={handleChange}>
-              {(adminOptions.locations || []).map((locationItem) => (
-                <option key={locationItem} value={locationItem}>
-                  {locationItem}
-                </option>
-              ))}
+            <select
+              name="organizer"
+              value={formData.organizer}
+              onChange={handleChange}
+            >
+              <option value="">Bez konkrétneho organizátora</option>
+
+              {(adminOptions.locations || []).map((locationItem) => {
+                const value = getOptionValue(locationItem)
+                const label = getOptionLabel(locationItem)
+
+                return (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                )
+              })}
             </select>
 
-            <select name="day" value={formData.day} onChange={handleChange}>
+            <select
+              name="day"
+              value={formData.day}
+              onChange={handleChange}
+            >
               <option value="Day 1">Deň 1</option>
               <option value="Day 2">Deň 2</option>
               <option value="Day 3">Deň 3</option>
@@ -386,7 +508,7 @@ function AdminEvents() {
             <input
               name="date"
               type="date"
-              value={formData.date}
+              value={formData.date || ''}
               onChange={handleChange}
             />
 
@@ -478,17 +600,23 @@ function AdminEvents() {
         <section className="admin-event-filter-card">
           <div>
             <p className="admin-small-label">FILTER</p>
+
             <h2>Prehľad aktivít</h2>
+
             <p>
-              Najprv vyber stav aktivity a potom ju môžeš ďalej filtrovať podľa kategórie,
-              programu, organizátora alebo dňa.
+              Najprv vyber stav aktivity a potom ju môžeš ďalej filtrovať
+              podľa kategórie, programu, organizátora alebo dňa.
             </p>
           </div>
 
           <div className="admin-event-filter-buttons">
             <button
               type="button"
-              className={activeAdminFilter === 'all' ? 'active-admin-filter-btn' : ''}
+              className={
+                activeAdminFilter === 'all'
+                  ? 'active-admin-filter-btn'
+                  : ''
+              }
               onClick={() => setActiveAdminFilter('all')}
             >
               Všetko ({events.length})
@@ -496,7 +624,11 @@ function AdminEvents() {
 
             <button
               type="button"
-              className={activeAdminFilter === 'published' ? 'active-admin-filter-btn' : ''}
+              className={
+                activeAdminFilter === 'published'
+                  ? 'active-admin-filter-btn'
+                  : ''
+              }
               onClick={() => setActiveAdminFilter('published')}
             >
               Zverejnené ({publishedCount})
@@ -504,7 +636,11 @@ function AdminEvents() {
 
             <button
               type="button"
-              className={activeAdminFilter === 'drafts' ? 'active-admin-filter-btn' : ''}
+              className={
+                activeAdminFilter === 'drafts'
+                  ? 'active-admin-filter-btn'
+                  : ''
+              }
               onClick={() => setActiveAdminFilter('drafts')}
             >
               Koncepty ({draftCount})
@@ -512,7 +648,11 @@ function AdminEvents() {
 
             <button
               type="button"
-              className={activeAdminFilter === 'full' ? 'active-admin-filter-btn' : ''}
+              className={
+                activeAdminFilter === 'full'
+                  ? 'active-admin-filter-btn'
+                  : ''
+              }
               onClick={() => setActiveAdminFilter('full')}
             >
               Naplnené ({fullCount})
@@ -520,34 +660,64 @@ function AdminEvents() {
           </div>
 
           <div className="admin-secondary-filters">
-            <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+            <select
+              value={categoryFilter}
+              onChange={(event) => setCategoryFilter(event.target.value)}
+            >
               <option value="all">Všetky kategórie</option>
-              {(adminOptions.eventCategories || []).map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
+
+              {(adminOptions.eventCategories || []).map((category) => {
+                const value = getOptionValue(category)
+                const label = getOptionLabel(category)
+
+                return (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                )
+              })}
             </select>
 
-            <select value={programFilter} onChange={(event) => setProgramFilter(event.target.value)}>
+            <select
+              value={programFilter}
+              onChange={(event) => setProgramFilter(event.target.value)}
+            >
               <option value="all">Všetky programy</option>
-              {(adminOptions.programs || []).map((program) => (
-                <option key={program} value={program}>
-                  {program}
-                </option>
-              ))}
+
+              {(adminOptions.programs || []).map((program) => {
+                const value = getOptionValue(program)
+                const label = getOptionLabel(program)
+
+                return (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                )
+              })}
             </select>
 
-            <select value={organizerFilter} onChange={(event) => setOrganizerFilter(event.target.value)}>
+            <select
+              value={organizerFilter}
+              onChange={(event) => setOrganizerFilter(event.target.value)}
+            >
               <option value="all">Všetci organizátori / miesta</option>
-              {(adminOptions.locations || []).map((locationItem) => (
-                <option key={locationItem} value={locationItem}>
-                  {locationItem}
-                </option>
-              ))}
+
+              {(adminOptions.locations || []).map((locationItem) => {
+                const value = getOptionValue(locationItem)
+                const label = getOptionLabel(locationItem)
+
+                return (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                )
+              })}
             </select>
 
-            <select value={dayFilter} onChange={(event) => setDayFilter(event.target.value)}>
+            <select
+              value={dayFilter}
+              onChange={(event) => setDayFilter(event.target.value)}
+            >
               <option value="all">Všetky dni</option>
               <option value="Day 1">Deň 1</option>
               <option value="Day 2">Deň 2</option>
@@ -558,13 +728,7 @@ function AdminEvents() {
             <button
               type="button"
               className="admin-clear-filters-btn"
-              onClick={() => {
-                setActiveAdminFilter('all')
-                setCategoryFilter('all')
-                setProgramFilter('all')
-                setOrganizerFilter('all')
-                setDayFilter('all')
-              }}
+              onClick={resetFilters}
             >
               Vyčistiť filtre
             </button>
@@ -575,78 +739,106 @@ function AdminEvents() {
           {isLoading && (
             <div className="admin-empty-state">
               <h3>Načítavam aktivity...</h3>
-              <p>Aktivity sa načítavajú zo Supabase.</p>
+
+              <p>
+                Aktivity sa načítavajú zo Supabase.
+              </p>
             </div>
           )}
 
-          {!isLoading && filteredAdminEvents.map((eventItem) => {
-            const isFull = isEventFull(eventItem)
-            const availableSpots = getAvailableSpots(eventItem)
+          {!isLoading &&
+            filteredAdminEvents.map((eventItem) => {
+              const isFull = isEventFull(eventItem)
+              const availableSpots = getAvailableSpots(eventItem)
 
-            return (
-              <article
-                className={editingEvent?.id === eventItem.id ? 'admin-event-row currently-editing-row' : 'admin-event-row'}
-                key={eventItem.id}
-              >
-                <div>
-                  <div className="admin-event-row-top">
-                    <span>{getCategoryLabel(eventItem.category)}</span>
-
-                    <span className={eventItem.published !== false ? 'admin-published' : 'admin-draft'}>
-                      {eventItem.published !== false ? 'Viditeľné pre účastníkov' : 'Skryté / koncept'}
-                    </span>
-
-                    {isFull && (
-                      <span className="admin-full">
-                        Kapacita naplnená
+              return (
+                <article
+                  className={
+                    editingEvent?.id === eventItem.id
+                      ? 'admin-event-row currently-editing-row'
+                      : 'admin-event-row'
+                  }
+                  key={eventItem.id}
+                >
+                  <div>
+                    <div className="admin-event-row-top">
+                      <span>
+                        {getCategoryLabel(eventItem.category)}
                       </span>
-                    )}
 
-                    {eventItem.image && (
-                      <span className="admin-image-added">
-                        Obrázok pridaný
+                      <span
+                        className={
+                          eventItem.published !== false
+                            ? 'admin-published'
+                            : 'admin-draft'
+                        }
+                      >
+                        {eventItem.published !== false
+                          ? 'Viditeľné pre účastníkov'
+                          : 'Skryté / koncept'}
                       </span>
-                    )}
+
+                      {isFull && (
+                        <span className="admin-full">
+                          Kapacita naplnená
+                        </span>
+                      )}
+
+                      {eventItem.image && (
+                        <span className="admin-image-added">
+                          Obrázok pridaný
+                        </span>
+                      )}
+                    </div>
+
+                    <h3>
+                      {eventItem.title}
+                    </h3>
+
+                    <p>
+                      {getDayLabel(eventItem.day)} · {eventItem.time} ·{' '}
+                      {eventItem.location}
+                    </p>
+
+                    <p>
+                      {eventItem.program || 'All participants'}
+                      {eventItem.organizer && ` · ${eventItem.organizer}`}
+                    </p>
+
+                    <p>
+                      Kapacita: {Number(eventItem.registered) || 0}/
+                      {Number(eventItem.capacity) || 0}
+                      {!isFull && ` · ${availableSpots} voľných miest`}
+                    </p>
                   </div>
 
-                  <h3>{eventItem.title}</h3>
+                  <div className="admin-row-actions">
+                    <button onClick={() => togglePublished(eventItem)}>
+                      {eventItem.published !== false ? 'Skryť' : 'Zverejniť'}
+                    </button>
 
-                  <p>
-                    {getDayLabel(eventItem.day)} · {eventItem.time} · {eventItem.location}
-                  </p>
+                    <button onClick={() => handleEdit(eventItem)}>
+                      Upraviť
+                    </button>
 
-                  <p>
-                    {eventItem.program || 'All participants'}
-                    {eventItem.organizer && ` · ${eventItem.organizer}`}
-                  </p>
-
-                  <p>
-                    Kapacita: {Number(eventItem.registered) || 0}/{Number(eventItem.capacity) || 0}
-                    {!isFull && ` · ${availableSpots} voľných miest`}
-                  </p>
-                </div>
-
-                <div className="admin-row-actions">
-                  <button onClick={() => togglePublished(eventItem)}>
-                    {eventItem.published !== false ? 'Skryť' : 'Zverejniť'}
-                  </button>
-
-                  <button onClick={() => handleEdit(eventItem)}>
-                    Upraviť
-                  </button>
-
-                  <button className="delete-button" onClick={() => handleDelete(eventItem.id)}>
-                    Zmazať
-                  </button>
-                </div>
-              </article>
-            )
-          })}
+                    <button
+                      className="delete-button"
+                      onClick={() => handleDelete(eventItem.id)}
+                    >
+                      Zmazať
+                    </button>
+                  </div>
+                </article>
+              )
+            })}
 
           {!isLoading && filteredAdminEvents.length === 0 && (
             <div className="admin-empty-state">
               <h3>Žiadne aktivity</h3>
-              <p>V tomto filtri momentálne nie sú žiadne aktivity.</p>
+
+              <p>
+                V tomto filtri momentálne nie sú žiadne aktivity.
+              </p>
             </div>
           )}
         </section>

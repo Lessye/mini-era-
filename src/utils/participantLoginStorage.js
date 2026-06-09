@@ -28,6 +28,10 @@ export function getCurrentParticipantEmail() {
 }
 
 export function saveCurrentParticipant(participant) {
+  if (!participant) {
+    return
+  }
+
   localStorage.setItem(CURRENT_PARTICIPANT_KEY, JSON.stringify(participant))
 }
 
@@ -42,7 +46,9 @@ export async function refreshCurrentParticipant() {
     return null
   }
 
-  const freshParticipant = await getSupabaseParticipantByEmail(currentParticipant.email)
+  const freshParticipant = await getSupabaseParticipantByEmail(
+    currentParticipant.email
+  )
 
   if (!freshParticipant) {
     logoutCurrentParticipant()
@@ -54,7 +60,7 @@ export async function refreshCurrentParticipant() {
 }
 
 export async function loginParticipantByEmail(email) {
-  const cleanEmail = email.trim().toLowerCase()
+  const cleanEmail = String(email || '').trim().toLowerCase()
 
   if (!cleanEmail) {
     return {
@@ -69,6 +75,13 @@ export async function loginParticipantByEmail(email) {
     return {
       success: false,
       message: 'This email is not registered for MiniEra.',
+    }
+  }
+
+  if (participant.status === 'Inactive') {
+    return {
+      success: false,
+      message: 'This participant is inactive.',
     }
   }
 

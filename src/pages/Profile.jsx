@@ -200,7 +200,12 @@ function Profile() {
               className="profile-icon"
             />
 
-            <span>{participant.group_name || 'Skupina nie je priradená'}</span>
+            <span>
+  {participant.group_name ||
+    participant.participant_group ||
+    participant.group ||
+    'Skupina nie je priradená'}
+</span>
 
           </div>
 
@@ -220,7 +225,11 @@ function Profile() {
 
           <div className="mini-stat-card">
             <h2 className="group-stat-value">
-              {getGroupShortLabel(participant.group_name)}
+              {getGroupShortLabel(
+  participant.group_name ||
+    participant.participant_group ||
+    participant.group
+)}
             </h2>
             <p>SKUPINA</p>
           </div>
